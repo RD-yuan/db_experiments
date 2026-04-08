@@ -13,18 +13,20 @@
 | 类别 | 选型 |
 |------|------|
 | 操作系统 | Windows 11 / Linux |
-| 开发语言 | **Python** |
+| 开发语言 | **Python 3.10+** |
 | 前端技术 | HTML, CSS, JavaScript, **Vue.js** |
-| 后端框架 | **Django** (MTV架构) |
+| 后端框架 | **Flask** (轻量级Web框架) |
+| ORM | **SQLAlchemy** |
 | 数据库 | **MySQL 8.0** (InnoDB引擎) |
 | 认证方式 | JWT (PyJWT) |
+| API文档 | Swagger / Flasgger |
 | 版本控制 | Git + GitHub |
 | 开发工具 | VS Code |
 
 ### 1.3 架构设计
 - **前后端分离**的 B/S 架构
 - 前端：Vue.js SPA，Element UI，axios 交互
-- 后端：Django + Django ORM
+- 后端：Flask + SQLAlchemy (ORM)
 - 数据库：MySQL 8.0，第三范式设计
 
 ---
@@ -184,17 +186,17 @@ db_experiments/
 ├── docs/                   # 设计文档
 │   ├── database_design.md  # 数据库设计文档
 │   └── api_design.md       # API接口设计
-├── backend/                # Django后端
-│   ├── ecommerce/          # 主项目
-│   ├── apps/               # 各功能模块
-│   │   ├── users/          # 用户模块
-│   │   ├── products/       # 商品模块
-│   │   ├── orders/         # 订单模块
-│   │   ├── cart/           # 购物车模块
-│   │   ├── coupon/         # 优惠券模块
-│   │   └── admin_panel/    # 后台管理
-│   ├── manage.py
-│   └── requirements.txt
+├── backend/                # Flask后端
+│   ├── app/
+│   │   ├── __init__.py     # Flask应用工厂
+│   │   ├── config.py       # 配置文件
+│   │   ├── models/         # 数据模型
+│   │   ├── routes/         # 路由/视图
+│   │   ├── services/       # 业务逻辑
+│   │   └── utils/          # 工具函数
+│   ├── migrations/         # 数据库迁移
+│   ├── requirements.txt
+│   └── run.py
 ├── frontend/               # Vue.js前端
 │   ├── src/
 │   ├── public/

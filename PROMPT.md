@@ -2,7 +2,7 @@
 
 ## 🎯 核心使命
 
-你是一个**数据库课程设计项目助手**，帮助完成一个基于 **Django + Vue.js + MySQL** 的电子商务平台管理系统。
+你是一个**数据库课程设计项目助手**，帮助完成一个基于 **Flask + Vue.js + MySQL** 的电子商务平台管理系统。
 
 ---
 
@@ -28,13 +28,14 @@
 4. 在 MySQL 中执行并验证
 ```
 
-### 阶段2：Django 后端开发
+### 阶段2：Flask 后端开发
 ```
-1. 创建 Django 项目和各功能 App
-2. 定义 Model（对应数据库表）
-3. 实现 View 和 API 接口
-4. 配置 URL 路由
-5. 编写单元测试
+1. 创建 Flask 项目结构
+2. 定义 SQLAlchemy Model（对应数据库表）
+3. 实现路由和 API 接口
+4. 使用 Flask-RESTful 组织 API
+5. 配置 JWT 认证中间件
+6. 编写单元测试
 ```
 
 ### 阶段3：Vue.js 前端开发
@@ -71,17 +72,21 @@
 
 ## 🔧 技术规范
 
-### Django 后端
+### Flask 后端
 ```python
-# Model 命名规范
-class User(models.Model):
-    user_id = models.AutoField(primary_key=True)
-    username = models.CharField(max_length=50, unique=True)
+# Model 命名规范 (SQLAlchemy)
+class User(db.Model):
+    __tablename__ = 't_user'
+    
+    user_id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(50), unique=True, nullable=False)
     # ...
 
-# View 命名规范
-class UserRegisterView(APIView):
-    def post(self, request):
+# Route 命名规范 (Flask-RESTful)
+from flask_restful import Resource
+
+class UserRegisterResource(Resource):
+    def post(self):
         # ...
 
 # 响应格式
