@@ -1,0 +1,30 @@
+# Flask 核心
+Flask==3.0.0
+Flask-CORS==4.0.0
+Flask-RESTful==0.3.10
+Flask-Migrate==4.0.5
+Flask-SQLAlchemy==3.1.1
+
+# 数据库
+SQLAlchemy==2.0.23
+PyMySQL==1.1.0
+cryptography==41.0.7
+
+# 认证
+PyJWT==2.8.0
+bcrypt==4.1.2
+
+# 数据验证
+marshmallow==3.20.1
+email-validator==2.1.0
+
+# API 文档
+flasgger==0.9.7.1
+
+# 工具
+python-dotenv==1.0.0
+requests==2.31.0
+
+# 开发/测试
+pytest==7.4.3
+pytest-cov==4.1.0
