@@ -203,3 +203,93 @@ def get_points_logs():
     
     result = paginate(query, page, per_page)
     return success_response(result)
+
+
+# ============ 消费统计 ============
+
+@user_bp.route('/consumption-stats', methods=['GET'])
+@token_required
+def get_consumption_stats():
+    """获取消费统计数据"""
+    from datetime import datetime, timedelta
+    from sqlalchemy import func
+    
+    user_id = g.current_user_id
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    period = request.args.get('period', 'daily')  # daily/weekly/monthly
+    
+    # 默认查询最近30天
+    if not start_date:
+        start_date = (datetime.utcnow() - timedelta(days=30)).strftime('%Y-%m-%d')
+    if not end_date:
+        end_date = datetime.utcnow().strftime('%Y-%m-%d')
+    
+    start_datetime = datetime.strptime(start_date, '%Y-%m-%d')
+    end_datetime = datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1)
+    
+    # 总体统计
+    total_stats = db.session.query(
+        func.count(Order.order_id).label('total_orders'),
+        func.sum(Order.payment_amount).label('total_amount')
+    ).filter(
+        Order.user_id == user_id,
+        Order.status.in_([1, 2, 3]),  # 已支付、已发货、已完成
+        Order.create_time >= start_datetime,
+        Order.create_time < end_datetime
+    ).first()
+    
+    # 按时间段统计
+    if period == 'daily':
+        date_format = func.date(Order.create_time)
+    elif period == 'weekly':
+        date_format = func.date_format(Order.create_time, '%Y-%u')
+    else:  # monthly
+        date_format = func.date_format(Order.create_time, '%Y-%m')
+    
+    trend_data = db.session.query(
+        date_format.label('date'),
+        func.count(Order.order_id).label('order_count'),
+        func.sum(Order.payment_amount).label('amount')
+    ).filter(
+        Order.user_id == user_id,
+        Order.status.in_([1, 2, 3]),
+        Order.create_time >= start_datetime,
+        Order.create_time < end_datetime
+    ).group_by(date_format).order_by(date_format).all()
+    
+    # 按商品分类统计消费占比
+    from app.models.models import Product, Category, OrderItem
+    
+    category_stats = db.session.query(
+        Category.name.label('category_name'),
+        func.sum(OrderItem.subtotal).label('amount')
+    ).join(
+        OrderItem, OrderItem.product_id == Product.product_id
+    ).join(
+        Category, Category.category_id == Product.category_id
+    ).join(
+        Order, Order.order_id == OrderItem.order_id
+    ).filter(
+        Order.user_id == user_id,
+        Order.status.in_([1, 2, 3]),
+        Order.create_time >= start_datetime,
+        Order.create_time < end_datetime
+    ).group_by(Category.name).all()
+    
+    return success_response({
+        'total_stats': {
+            'total_orders': total_stats.total_orders or 0,
+            'total_amount': float(total_stats.total_amount or 0)
+        },
+        'trend': [{
+            'date': str(t.date),
+            'order_count': t.order_count,
+            'amount': float(t.amount or 0)
+        } for t in trend_data],
+        'category_distribution': [{
+            'name': c.category_name,
+            'value': float(c.amount or 0)
+        } for c in category_stats]
+    })
+
