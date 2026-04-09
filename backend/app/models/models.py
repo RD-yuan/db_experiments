@@ -342,7 +342,7 @@ class OrderItem(db.Model):
     is_reviewed = db.Column(db.SmallInteger, default=0)
     
     # 关联
-    product = db.relationship('Product', read_only=True)
+    product = db.relationship('Product')
     
     def to_dict(self):
         return {
