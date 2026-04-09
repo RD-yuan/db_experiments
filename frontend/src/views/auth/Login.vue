@@ -11,9 +11,12 @@
           <el-input
             v-model="loginForm.username"
             placeholder="用户名/手机号/邮箱"
-            prefix-icon="User"
             size="large"
-          />
+          >
+            <template #prefix>
+              <el-icon><User /></el-icon>
+            </template>
+          </el-input>
         </el-form-item>
         
         <el-form-item prop="password">
@@ -21,11 +24,14 @@
             v-model="loginForm.password"
             type="password"
             placeholder="密码"
-            prefix-icon="Lock"
             size="large"
             show-password
             @keyup.enter="handleLogin"
-          />
+          >
+            <template #prefix>
+              <el-icon><Lock /></el-icon>
+            </template>
+          </el-input>
         </el-form-item>
         
         <el-form-item>
@@ -33,8 +39,8 @@
             type="primary"
             size="large"
             :loading="loading"
+            style="width: 100%"
             @click="handleLogin"
-            class="login-btn"
           >
             登录
           </el-button>
@@ -80,33 +86,38 @@ const rules = {
 }
 
 const handleLogin = async () => {
-  if (!loginFormRef.value) return
-  
-  await loginFormRef.value.validate(async (valid) => {
-    if (!valid) return
-    
-    loading.value = true
-    try {
-      const data = await api.auth.login(loginForm)
-      
-      // 保存 token
-      setToken(data.token)
-      userStore.setToken(data.token)
-      
-      // 保存用户信息
-      userStore.setUser(data.user)
-      
-      ElMessage.success('登录成功')
-      
-      // 跳转到之前的页面或首页
-      const redirect = route.query.redirect || '/'
-      router.push(redirect)
-    } catch (error) {
-      console.error('登录失败:', error)
-    } finally {
-      loading.value = false
-    }
-  })
+  const formEl = loginFormRef.value
+  if (!formEl) return
+
+  // 表单验证（Promise 风格）
+  try {
+    await formEl.validate()
+  } catch {
+    return  // 验证不通过，el-form 会自动显示错误提示
+  }
+
+  loading.value = true
+  try {
+    const data = await api.auth.login({
+      username: loginForm.username,
+      password: loginForm.password
+    })
+
+    setToken(data.token)
+    userStore.setToken(data.token)
+    userStore.setUser(data.user)
+
+    ElMessage.success('登录成功')
+
+    const redirect = route.query.redirect || '/'
+    router.push(redirect)
+  } catch (error) {
+    // 从 axios error 中提取后端返回的错误信息
+    const msg = error.response?.data?.message || error.message || '登录失败'
+    ElMessage.error(msg)
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 
@@ -146,17 +157,6 @@ const handleLogin = async () => {
 .login-form {
   .el-form-item {
     margin-bottom: 20px;
-  }
-}
-
-.login-btn {
-  width: 100%;
-  background-color: #ff6700;
-  border-color: #ff6700;
-  
-  &:hover {
-    background-color: #ff8533;
-    border-color: #ff8533;
   }
 }
 

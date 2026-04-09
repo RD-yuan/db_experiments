@@ -11,27 +11,36 @@
           <el-input
             v-model="registerForm.username"
             placeholder="用户名"
-            prefix-icon="User"
             size="large"
-          />
+          >
+            <template #prefix>
+              <el-icon><User /></el-icon>
+            </template>
+          </el-input>
         </el-form-item>
         
         <el-form-item prop="phone">
           <el-input
             v-model="registerForm.phone"
             placeholder="手机号"
-            prefix-icon="Phone"
             size="large"
-          />
+          >
+            <template #prefix>
+              <el-icon><Phone /></el-icon>
+            </template>
+          </el-input>
         </el-form-item>
         
         <el-form-item prop="email">
           <el-input
             v-model="registerForm.email"
             placeholder="邮箱"
-            prefix-icon="Message"
             size="large"
-          />
+          >
+            <template #prefix>
+              <el-icon><Message /></el-icon>
+            </template>
+          </el-input>
         </el-form-item>
         
         <el-form-item prop="password">
@@ -39,10 +48,13 @@
             v-model="registerForm.password"
             type="password"
             placeholder="密码"
-            prefix-icon="Lock"
             size="large"
             show-password
-          />
+          >
+            <template #prefix>
+              <el-icon><Lock /></el-icon>
+            </template>
+          </el-input>
         </el-form-item>
         
         <el-form-item prop="confirmPassword">
@@ -50,11 +62,14 @@
             v-model="registerForm.confirmPassword"
             type="password"
             placeholder="确认密码"
-            prefix-icon="Lock"
             size="large"
             show-password
             @keyup.enter="handleRegister"
-          />
+          >
+            <template #prefix>
+              <el-icon><Lock /></el-icon>
+            </template>
+          </el-input>
         </el-form-item>
         
         <el-form-item>
@@ -62,8 +77,8 @@
             type="primary"
             size="large"
             :loading="loading"
+            style="width: 100%"
             @click="handleRegister"
-            class="register-btn"
           >
             注册
           </el-button>
@@ -132,35 +147,36 @@ const rules = {
 }
 
 const handleRegister = async () => {
-  if (!registerFormRef.value) return
-  
-  await registerFormRef.value.validate(async (valid) => {
-    if (!valid) return
-    
-    loading.value = true
-    try {
-      const data = await api.auth.register({
-        username: registerForm.username,
-        phone: registerForm.phone || undefined,
-        email: registerForm.email || undefined,
-        password: registerForm.password
-      })
-      
-      // 保存 token
-      setToken(data.token)
-      userStore.setToken(data.token)
-      
-      // 保存用户信息
-      userStore.setUser(data.user)
-      
-      ElMessage.success('注册成功')
-      router.push('/')
-    } catch (error) {
-      console.error('注册失败:', error)
-    } finally {
-      loading.value = false
-    }
-  })
+  const formEl = registerFormRef.value
+  if (!formEl) return
+
+  try {
+    await formEl.validate()
+  } catch {
+    return
+  }
+
+  loading.value = true
+  try {
+    const data = await api.auth.register({
+      username: registerForm.username,
+      phone: registerForm.phone || undefined,
+      email: registerForm.email || undefined,
+      password: registerForm.password
+    })
+
+    setToken(data.token)
+    userStore.setToken(data.token)
+    userStore.setUser(data.user)
+
+    ElMessage.success('注册成功')
+    router.push('/')
+  } catch (error) {
+    const msg = error.response?.data?.message || error.message || '注册失败'
+    ElMessage.error(msg)
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 
@@ -200,17 +216,6 @@ const handleRegister = async () => {
 .register-form {
   .el-form-item {
     margin-bottom: 18px;
-  }
-}
-
-.register-btn {
-  width: 100%;
-  background-color: #ff6700;
-  border-color: #ff6700;
-  
-  &:hover {
-    background-color: #ff8533;
-    border-color: #ff8533;
   }
 }
 

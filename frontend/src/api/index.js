@@ -34,7 +34,7 @@ service.interceptors.response.use(
       // 401: Token 过期
       if (res.code === 401) {
         removeToken()
-        location.href = '/login'
+        window.location.href = '/login'
       }
       
       return Promise.reject(new Error(res.message || 'Error'))
@@ -43,7 +43,9 @@ service.interceptors.response.use(
     return res.data
   },
   error => {
-    ElMessage.error(error.message || '网络错误')
+    // 优先展示后端返回的错误信息
+    const msg = error.response?.data?.message || error.message || '网络错误'
+    ElMessage.error(msg)
     return Promise.reject(error)
   }
 )
