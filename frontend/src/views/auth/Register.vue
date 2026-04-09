@@ -148,6 +148,7 @@ const handleRegister = async () => {
       
       // 保存 token
       setToken(data.token)
+      userStore.setToken(data.token)
       
       // 保存用户信息
       userStore.setUser(data.user)
