@@ -38,8 +38,8 @@
           <el-button
             type="primary"
             size="large"
-            :loading="loading"
             style="width: 100%"
+            :loading="loading"
             @click="handleLogin"
           >
             登录
@@ -85,39 +85,33 @@ const rules = {
   ]
 }
 
-const handleLogin = async () => {
+const handleLogin = () => {
   const formEl = loginFormRef.value
-  if (!formEl) return
-
-  // 表单验证（Promise 风格）
-  try {
-    await formEl.validate()
-  } catch {
-    return  // 验证不通过，el-form 会自动显示错误提示
+  if (!formEl) {
+    console.error('表单引用未找到')
+    return
   }
 
-  loading.value = true
-  try {
-    const data = await api.auth.login({
+  formEl.validate((valid) => {
+    if (!valid) return
+
+    loading.value = true
+    api.auth.login({
       username: loginForm.username,
       password: loginForm.password
+    }).then(data => {
+      setToken(data.token)
+      userStore.setToken(data.token)
+      userStore.setUser(data.user)
+      ElMessage.success('登录成功')
+      router.push(route.query.redirect || '/')
+    }).catch(error => {
+      const msg = error?.response?.data?.message || error?.message || '登录失败'
+      ElMessage.error(msg)
+    }).finally(() => {
+      loading.value = false
     })
-
-    setToken(data.token)
-    userStore.setToken(data.token)
-    userStore.setUser(data.user)
-
-    ElMessage.success('登录成功')
-
-    const redirect = route.query.redirect || '/'
-    router.push(redirect)
-  } catch (error) {
-    // 从 axios error 中提取后端返回的错误信息
-    const msg = error.response?.data?.message || error.message || '登录失败'
-    ElMessage.error(msg)
-  } finally {
-    loading.value = false
-  }
+  })
 }
 </script>
 

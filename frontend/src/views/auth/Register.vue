@@ -22,7 +22,7 @@
         <el-form-item prop="phone">
           <el-input
             v-model="registerForm.phone"
-            placeholder="手机号"
+            placeholder="手机号（选填）"
             size="large"
           >
             <template #prefix>
@@ -34,7 +34,7 @@
         <el-form-item prop="email">
           <el-input
             v-model="registerForm.email"
-            placeholder="邮箱"
+            placeholder="邮箱（选填）"
             size="large"
           >
             <template #prefix>
@@ -76,8 +76,8 @@
           <el-button
             type="primary"
             size="large"
-            :loading="loading"
             style="width: 100%"
+            :loading="loading"
             @click="handleRegister"
           >
             注册
@@ -146,37 +146,35 @@ const rules = {
   ]
 }
 
-const handleRegister = async () => {
+const handleRegister = () => {
   const formEl = registerFormRef.value
-  if (!formEl) return
-
-  try {
-    await formEl.validate()
-  } catch {
+  if (!formEl) {
+    console.error('表单引用未找到')
     return
   }
 
-  loading.value = true
-  try {
-    const data = await api.auth.register({
+  formEl.validate((valid) => {
+    if (!valid) return
+
+    loading.value = true
+    api.auth.register({
       username: registerForm.username,
       phone: registerForm.phone || undefined,
       email: registerForm.email || undefined,
       password: registerForm.password
+    }).then(data => {
+      setToken(data.token)
+      userStore.setToken(data.token)
+      userStore.setUser(data.user)
+      ElMessage.success('注册成功')
+      router.push('/')
+    }).catch(error => {
+      const msg = error?.response?.data?.message || error?.message || '注册失败'
+      ElMessage.error(msg)
+    }).finally(() => {
+      loading.value = false
     })
-
-    setToken(data.token)
-    userStore.setToken(data.token)
-    userStore.setUser(data.user)
-
-    ElMessage.success('注册成功')
-    router.push('/')
-  } catch (error) {
-    const msg = error.response?.data?.message || error.message || '注册失败'
-    ElMessage.error(msg)
-  } finally {
-    loading.value = false
-  }
+  })
 }
 </script>
 
