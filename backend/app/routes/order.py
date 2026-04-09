@@ -47,7 +47,7 @@ def get_orders():
     
     # 为每个订单添加商品明细
     for order_data in result['items']:
-        order = Order.query.get(order_data['order_id'])
+        order = db.session.get(Order, order_data['order_id'])
         order_data['items'] = [item.to_dict() for item in order.items]
     
     return success_response(result)

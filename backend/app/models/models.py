@@ -57,7 +57,7 @@ class Category(db.Model):
     
     category_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     name = db.Column(db.String(50), nullable=False)
-    parent_id = db.Column(db.Integer, default=0)
+    parent_id = db.Column(db.Integer, db.ForeignKey('t_category.category_id'), default=0)
     level = db.Column(db.SmallInteger, default=1)
     icon = db.Column(db.String(255))
     sort_order = db.Column(db.Integer, default=0)
@@ -297,6 +297,7 @@ class Order(db.Model):
     items = db.relationship('OrderItem', backref='order', lazy='dynamic', cascade='all, delete-orphan')
     
     STATUS_TEXT = {
+
         0: '待支付',
         1: '已支付',
         2: '已发货',
@@ -339,6 +340,9 @@ class OrderItem(db.Model):
     quantity = db.Column(db.Integer, nullable=False)
     subtotal = db.Column(db.Numeric(10, 2), nullable=False)
     is_reviewed = db.Column(db.SmallInteger, default=0)
+    
+    # 关联
+    product = db.relationship('Product', read_only=True)
     
     def to_dict(self):
         return {

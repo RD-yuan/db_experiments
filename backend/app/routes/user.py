@@ -258,8 +258,6 @@ def get_consumption_stats():
     ).group_by(date_format).order_by(date_format).all()
     
     # 按商品分类统计消费占比
-    from app.models.models import Product, Category, OrderItem
-    
     category_stats = db.session.query(
         Category.name.label('category_name'),
         func.sum(OrderItem.subtotal).label('amount')
