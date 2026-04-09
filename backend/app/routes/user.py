@@ -4,13 +4,15 @@
 from flask import Blueprint, request, g
 from flasgger import swag_from
 from app import db
-from app.models.models import User, Address, PointsLog
+from app.models.models import User, Address, PointsLog, Order, OrderItem, Product, Category
 from app.utils.helpers import (
     success_response, error_response, token_required,
     paginate
 )
 
 user_bp = Blueprint('user', __name__)
+
+@user_bp.route('/profile', methods=['GET'])
 @token_required
 @swag_from({
     'tags': ['用户'],
