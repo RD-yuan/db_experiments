@@ -70,6 +70,16 @@ def create_app(config_name='default'):
     app.register_blueprint(review_bp, url_prefix='/api/reviews')
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
     
+    # 根路由
+    @app.route('/')
+    def index():
+        return {
+            'name': '电子商务平台 API',
+            'version': '1.0.0',
+            'docs': '/apidocs',
+            'health': '/health'
+        }
+
     # 健康检查
     @app.route('/health')
     def health():
