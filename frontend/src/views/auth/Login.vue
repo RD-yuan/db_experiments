@@ -87,30 +87,30 @@ const rules = {
 
 const handleLogin = () => {
   const formEl = loginFormRef.value
-  if (!formEl) {
-    console.error('表单引用未找到')
-    return
-  }
+  if (!formEl) return
 
-  formEl.validate((valid) => {
+  formEl.validate(async (valid) => {
     if (!valid) return
 
     loading.value = true
-    api.auth.login({
-      username: loginForm.username,
-      password: loginForm.password
-    }).then(data => {
+    try {
+      // 动态导入 api，确保使用时模块已完全初始化
+      const { api } = await import('@/api')
+      const data = await api.auth.login({
+        username: loginForm.username,
+        password: loginForm.password
+      })
       setToken(data.token)
       userStore.setToken(data.token)
       userStore.setUser(data.user)
       ElMessage.success('登录成功')
       router.push(route.query.redirect || '/')
-    }).catch(error => {
+    } catch (error) {
       const msg = error?.response?.data?.message || error?.message || '登录失败'
       ElMessage.error(msg)
-    }).finally(() => {
+    } finally {
       loading.value = false
-    })
+    }
   })
 }
 </script>
