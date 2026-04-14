@@ -44,6 +44,8 @@ yarn-error.log*
 
 # Vue.js
 frontend/dist/
+frontend/playwright-report/
+frontend/test-results/
 
 # 敏感文件
 *.pem
@@ -54,3 +56,4 @@ secrets.json
 *.tmp
 *.temp
 backend/app/config.py
+backend/e2e.sqlite3

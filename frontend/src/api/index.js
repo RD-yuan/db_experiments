@@ -1,4 +1,5 @@
-import axios from 'axios'
+// Vue CLI's dev bundling trips over axios' ESM helpers; use the browser CJS build for stable runtime behavior.
+import axios from 'axios/dist/browser/axios.cjs'
 import { ElMessage } from 'element-plus'
 import { getToken, removeToken } from '@/utils/auth'
 
