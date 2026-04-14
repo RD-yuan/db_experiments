@@ -111,7 +111,7 @@ class Product(db.Model):
     @property
     def available_stock(self):
         """可售库存"""
-        return self.stock - self.locked_stock
+        return (self.stock or 0) - (self.locked_stock or 0)
     
     def to_dict(self):
         return {
@@ -121,16 +121,16 @@ class Product(db.Model):
             'price': float(self.price) if self.price else 0,
             'original_price': float(self.original_price) if self.original_price else None,
             'vip_price': float(self.vip_price) if self.vip_price else None,
-            'stock': self.stock,
+            'stock': self.stock or 0,
             'available_stock': self.available_stock,
-            'sold_count': self.sold_count,
+            'sold_count': self.sold_count or 0,
             'category_id': self.category_id,
             'brand': self.brand,
             'main_image': self.main_image,
-            'status': self.status,
-            'is_hot': self.is_hot,
-            'is_new': self.is_new,
-            'is_recommend': self.is_recommend
+            'status': self.status if self.status is not None else 0,
+            'is_hot': self.is_hot or 0,
+            'is_new': self.is_new or 0,
+            'is_recommend': self.is_recommend or 0
         }
 
 

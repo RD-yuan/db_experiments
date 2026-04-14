@@ -1,79 +1,80 @@
-/*
 import { createRouter, createWebHistory } from 'vue-router'
 import { pinia } from '@/stores'
 import { useUserStore } from '@/stores/user'
 
+const APP_TITLE = 'Ecommerce Platform'
+
 const routes = [
   {
     path: '/',
-    component: () => import('@/views/layout/MainLayout.vue'),
+    component: () => import('@/views/layout/SessionMainLayout.vue'),
     redirect: '/home',
     children: [
       {
         path: 'home',
         name: 'Home',
         component: () => import('@/views/home/Index.vue'),
-        meta: { title: '首页' }
+        meta: { title: 'Home' }
       },
       {
         path: 'products',
         name: 'Products',
         component: () => import('@/views/product/List.vue'),
-        meta: { title: '商品列表' }
+        meta: { title: 'Products' }
       },
       {
         path: 'product/:id',
         name: 'ProductDetail',
         component: () => import('@/views/product/Detail.vue'),
-        meta: { title: '商品详情' }
+        meta: { title: 'Product Detail' }
       },
       {
         path: 'cart',
         name: 'Cart',
         component: () => import('@/views/cart/Index.vue'),
-        meta: { title: '购物车', requiresAuth: true }
+        meta: { title: 'Cart', requiresAuth: true }
       },
       {
         path: 'orders',
         name: 'Orders',
         component: () => import('@/views/order/List.vue'),
-        meta: { title: '我的订单', requiresAuth: true }
+        meta: { title: 'Orders', requiresAuth: true }
       },
       {
         path: 'order/:id',
         name: 'OrderDetail',
         component: () => import('@/views/order/Detail.vue'),
-        meta: { title: '订单详情', requiresAuth: true }
+        meta: { title: 'Order Detail', requiresAuth: true }
       },
       {
         path: 'user',
-        name: 'UserCenter',
         component: () => import('@/views/user/Center.vue'),
-        meta: { title: '个人中心', requiresAuth: true },
+        meta: { title: 'User Center', requiresAuth: true },
+        redirect: '/user/profile',
         children: [
           {
             path: 'profile',
             name: 'Profile',
             component: () => import('@/views/user/Profile.vue'),
-            meta: { title: '个人信息' }
+            meta: { title: 'Profile', requiresAuth: true }
           },
           {
             path: 'addresses',
             name: 'Addresses',
             component: () => import('@/views/user/Addresses.vue'),
-            meta: { title: '地址管理' }
+            meta: { title: 'Addresses', requiresAuth: true }
           },
           {
             path: 'stats',
             name: 'ConsumptionStats',
             component: () => import('@/views/user/Stats.vue'),
-            meta: { title: '消费统计' }
+            meta: { title: 'Stats', requiresAuth: true }
           },
           {
             path: 'coupons',
             name: 'MyCoupons',
             component: () => import('@/views/user/Coupons.vue'),
-            meta: { title: '我的优惠券' }
+            meta: { title: 'Coupons', requiresAuth: true }
           }
         ]
       }
@@ -82,20 +83,19 @@ const routes = [
   {
     path: '/login',
     name: 'Login',
-    component: () => import('@/views/auth/Login.vue'),
-    meta: { title: '登录' }
+    component: () => import('@/views/auth/SessionLoginPage.vue'),
+    meta: { title: 'Login' }
   },
   {
     path: '/register',
     name: 'Register',
-    component: () => import('@/views/auth/Register.vue'),
-    meta: { title: '注册' }
+    component: () => import('@/views/auth/SessionRegisterPage.vue'),
+    meta: { title: 'Register' }
   },
   {
     path: '/admin',
-    name: 'AdminLayout',
-    component: () => import('@/views/admin/Layout.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true },
+    component: () => import('@/views/admin/SessionAdminShell.vue'),
+    meta: { title: 'Admin', requiresAuth: true, requiresAdmin: true },
     children: [
       {
         path: '',
@@ -105,31 +105,31 @@ const routes = [
         path: 'dashboard',
         name: 'Dashboard',
         component: () => import('@/views/admin/Dashboard.vue'),
-        meta: { title: '数据看板' }
+        meta: { title: 'Dashboard', requiresAuth: true, requiresAdmin: true }
       },
       {
         path: 'users',
         name: 'UserManagement',
         component: () => import('@/views/admin/Users.vue'),
-        meta: { title: '用户管理' }
+        meta: { title: 'Users', requiresAuth: true, requiresAdmin: true }
       },
       {
         path: 'products',
         name: 'ProductManagement',
         component: () => import('@/views/admin/Products.vue'),
-        meta: { title: '商品管理' }
+        meta: { title: 'Products', requiresAuth: true, requiresAdmin: true }
       },
       {
         path: 'orders',
         name: 'OrderManagement',
         component: () => import('@/views/admin/Orders.vue'),
-        meta: { title: '订单管理' }
+        meta: { title: 'Orders', requiresAuth: true, requiresAdmin: true }
       },
       {
         path: 'coupons',
         name: 'CouponManagement',
         component: () => import('@/views/admin/Coupons.vue'),
-        meta: { title: '优惠券管理' }
+        meta: { title: 'Coupons', requiresAuth: true, requiresAdmin: true }
       }
     ]
   },
@@ -137,7 +137,7 @@ const routes = [
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
     component: () => import('@/views/error/404.vue'),
-    meta: { title: '页面不存在' }
+    meta: { title: 'Not Found' }
   }
 ]
 
@@ -146,29 +146,33 @@ const router = createRouter({
   routes
 })
 
-// 路由守卫
-const authPages = new Set(['/login', '/register'])
-
 router.beforeEach(async (to) => {
-  // 设置页面标题
-  document.title = to.meta.title ? `${to.meta.title} - 电商平台` : '电商平台'
-  
-  // 检查是否需要登录
-  if (to.meta.requiresAuth) {
-    const token = getToken()
-    if (!token) {
-      next({
-        path: '/login',
-        query: { redirect: to.fullPath }
-      })
-      return
+  document.title = to.meta?.title ? `${to.meta.title} - ${APP_TITLE}` : APP_TITLE
+
+  const userStore = useUserStore(pinia)
+  const requiresAuth = to.matched.some((record) => record.meta.requiresAuth)
+  const requiresAdmin = to.matched.some((record) => record.meta.requiresAdmin)
+
+  if (userStore.hasToken) {
+    await userStore.ensureSession(true)
+  }
+
+  if (requiresAuth && !userStore.isLoggedIn) {
+    return {
+      path: '/login',
+      query: { redirect: to.fullPath }
     }
   }
-  
-  next()
+
+  if ((to.path === '/login' || to.path === '/register') && userStore.isLoggedIn) {
+    return typeof to.query.redirect === 'string' ? to.query.redirect : '/'
+  }
+
+  if (requiresAdmin && !userStore.isAdmin) {
+    return '/'
+  }
+
+  return true
 })
 
 export default router
-*/
-
-export { default } from './session-router'

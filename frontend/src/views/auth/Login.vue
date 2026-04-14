@@ -59,8 +59,6 @@
 import { ref, reactive } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { api } from '@/api'
-import { setToken } from '@/utils/auth'
 import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
@@ -100,9 +98,7 @@ const handleLogin = () => {
         username: loginForm.username,
         password: loginForm.password
       })
-      setToken(data.token)
-      userStore.setToken(data.token)
-      userStore.setUser(data.user)
+      userStore.setAuth(data)
       ElMessage.success('登录成功')
       router.push(route.query.redirect || '/')
     } catch (error) {

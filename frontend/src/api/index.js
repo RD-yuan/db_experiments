@@ -3,32 +3,45 @@ import axios from 'axios/dist/browser/axios.cjs'
 import { ElMessage } from 'element-plus'
 import { getToken, removeToken } from '@/utils/auth'
 
-// 创建 axios 实例
 const request = axios.create({
-  baseURL: process.env.VUE_APP_API_BASE_URL || 'http://localhost:5000',
+  // Default to same-origin requests so remote browsers don't resolve "localhost"
+  // to themselves. In development, vue.config.js proxies /api to the backend.
+  baseURL: process.env.VUE_APP_API_BASE_URL || '',
   timeout: 15000
 })
 
-// 请求拦截器
+async function clearClientSession() {
+  removeToken()
+
+  try {
+    const [{ pinia }, { useUserStore }] = await Promise.all([
+      import('@/stores'),
+      import('@/stores/user')
+    ])
+    useUserStore(pinia).clearAuth()
+  } catch (error) {
+    // Token cleanup is enough if the store cannot be loaded yet.
+  }
+}
+
 request.interceptors.request.use(
   config => {
     const token = getToken()
     if (token) {
-      config.headers['Authorization'] = `Bearer ${token}`
+      config.headers.Authorization = `Bearer ${token}`
     }
     return config
   },
   error => Promise.reject(error)
 )
 
-// 响应拦截器
 request.interceptors.response.use(
   response => {
     const res = response.data
     if (res.code !== 200) {
       ElMessage.error(res.message || '请求失败')
       if (res.code === 401) {
-        removeToken()
+        clearClientSession()
         window.location.href = '/login'
       }
       return Promise.reject(new Error(res.message || 'Error'))
@@ -36,13 +49,29 @@ request.interceptors.response.use(
     return res.data
   },
   error => {
-    const msg = error.response?.data?.message || error.message || '网络错误'
+    let msg = error.response?.data?.message || ''
+    const status = error.response?.status
+    const requestUrl = error.config?.url || ''
+
+    if (!msg) {
+      if (error.code === 'ECONNABORTED') {
+        msg = '请求超时，请检查后端服务和远程数据库连通性'
+      } else if (error.message === 'Network Error') {
+        msg = '无法连接后端服务，或后端无法访问远程数据库'
+      } else {
+        msg = error.message || '网络错误'
+      }
+    }
+
+    if (status === 401 || status === 403 || (status === 404 && requestUrl.includes('/api/users/profile'))) {
+      clearClientSession()
+    }
+
     ElMessage.error(msg)
     return Promise.reject(error)
   }
 )
 
-// 统一 API 对象——所有方法直接用 request，无交叉引用
 const api = {
   auth: {
     register: (data) => request.post('/api/auth/register', data),
