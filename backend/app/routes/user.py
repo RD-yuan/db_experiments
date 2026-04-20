@@ -1,7 +1,7 @@
 """
 用户路由
 """
-from flask import Blueprint, request, g
+from flask import Blueprint, request, g, current_app
 from flasgger import swag_from
 from app import db
 from app.models.models import User, Address, PointsLog, Order, OrderItem, Product, Category
@@ -209,84 +209,100 @@ def get_points_logs():
 @user_bp.route('/consumption-stats', methods=['GET'])
 @token_required
 def get_consumption_stats():
-    """获取消费统计数据"""
+    """获取消费统计数据（兼容 MySQL / SQLite）"""
     from datetime import datetime, timedelta
     from sqlalchemy import func
-    
+    from collections import defaultdict
+
     user_id = g.current_user_id
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
     period = request.args.get('period', 'daily')  # daily/weekly/monthly
-    
+
     # 默认查询最近30天
     if not start_date:
         start_date = (datetime.utcnow() - timedelta(days=30)).strftime('%Y-%m-%d')
     if not end_date:
         end_date = datetime.utcnow().strftime('%Y-%m-%d')
-    
+
     start_datetime = datetime.strptime(start_date, '%Y-%m-%d')
     end_datetime = datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1)
-    
-    # 总体统计
-    total_stats = db.session.query(
-        func.count(Order.order_id).label('total_orders'),
-        func.sum(Order.payment_amount).label('total_amount')
-    ).filter(
-        Order.user_id == user_id,
-        Order.status.in_([1, 2, 3]),  # 已支付、已发货、已完成
-        Order.create_time >= start_datetime,
-        Order.create_time < end_datetime
-    ).first()
-    
-    # 按时间段统计
-    if period == 'daily':
-        date_format = func.date(Order.create_time)
-    elif period == 'weekly':
-        date_format = func.date_format(Order.create_time, '%Y-%u')
-    else:  # monthly
-        date_format = func.date_format(Order.create_time, '%Y-%m')
-    
-    trend_data = db.session.query(
-        date_format.label('date'),
-        func.count(Order.order_id).label('order_count'),
-        func.sum(Order.payment_amount).label('amount')
-    ).filter(
-        Order.user_id == user_id,
-        Order.status.in_([1, 2, 3]),
-        Order.create_time >= start_datetime,
-        Order.create_time < end_datetime
-    ).group_by(date_format).order_by(date_format).all()
-    
-    # 按商品分类统计消费占比
-    category_stats = db.session.query(
-        Category.name.label('category_name'),
-        func.sum(OrderItem.subtotal).label('amount')
-    ).join(
-        OrderItem, OrderItem.product_id == Product.product_id
-    ).join(
-        Category, Category.category_id == Product.category_id
-    ).join(
-        Order, Order.order_id == OrderItem.order_id
-    ).filter(
-        Order.user_id == user_id,
-        Order.status.in_([1, 2, 3]),
-        Order.create_time >= start_datetime,
-        Order.create_time < end_datetime
-    ).group_by(Category.name).all()
-    
-    return success_response({
-        'total_stats': {
-            'total_orders': total_stats.total_orders or 0,
-            'total_amount': float(total_stats.total_amount or 0)
-        },
-        'trend': [{
-            'date': str(t.date),
-            'order_count': t.order_count,
-            'amount': float(t.amount or 0)
-        } for t in trend_data],
-        'category_distribution': [{
-            'name': c.category_name,
-            'value': float(c.amount or 0)
-        } for c in category_stats]
-    })
+
+    try:
+        # 总体统计
+        total_stats = db.session.query(
+            func.count(Order.order_id).label('total_orders'),
+            func.sum(Order.payment_amount).label('total_amount')
+        ).filter(
+            Order.user_id == user_id,
+            Order.status.in_([1, 2, 3]),
+            Order.create_time >= start_datetime,
+            Order.create_time < end_datetime
+        ).first()
+
+        # 查询订单原始数据（不做日期格式化，由 Python 处理分组）
+        orders = db.session.query(
+            Order.create_time,
+            Order.payment_amount
+        ).filter(
+            Order.user_id == user_id,
+            Order.status.in_([1, 2, 3]),
+            Order.create_time >= start_datetime,
+            Order.create_time < end_datetime
+        ).all()
+
+        # 按商品分类统计消费占比
+        category_stats = db.session.query(
+            Category.name.label('category_name'),
+            func.sum(OrderItem.subtotal).label('amount')
+        ).join(
+            Product, Product.product_id == OrderItem.product_id
+        ).join(
+            Category, Category.category_id == Product.category_id
+        ).join(
+            Order, Order.order_id == OrderItem.order_id
+        ).filter(
+            Order.user_id == user_id,
+            Order.status.in_([1, 2, 3]),
+            Order.create_time >= start_datetime,
+            Order.create_time < end_datetime
+        ).group_by(Category.name).all()
+
+        # 按周期聚合数据
+        trend_map = defaultdict(lambda: {'order_count': 0, 'amount': 0.0})
+        for create_time, amount in orders:
+            if period == 'daily':
+                key = create_time.strftime('%Y-%m-%d')
+            elif period == 'weekly':
+                key = create_time.strftime('%Y-%U')  # 年-周数
+            else:  # monthly
+                key = create_time.strftime('%Y-%m')
+            trend_map[key]['order_count'] += 1
+            trend_map[key]['amount'] += float(amount or 0)
+
+        # 转换为列表并按日期排序
+        trend_data = [
+            {
+                'date': key,
+                'order_count': val['order_count'],
+                'amount': round(val['amount'], 2)
+            }
+            for key, val in sorted(trend_map.items())
+        ]
+
+        return success_response({
+            'total_stats': {
+                'total_orders': total_stats.total_orders or 0,
+                'total_amount': float(total_stats.total_amount or 0)
+            },
+            'trend': trend_data,
+            'category_distribution': [{
+                'name': c.category_name,
+                'value': float(c.amount or 0)
+            } for c in category_stats]
+        })
+    except Exception as e:
+        # 如果仍失败，记录详细错误并返回友好提示
+        current_app.logger.error(f"消费统计查询失败: {str(e)}", exc_info=True)
+        return error_response(f'统计查询失败，请稍后重试', 500)
 
