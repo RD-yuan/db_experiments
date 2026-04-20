@@ -160,6 +160,7 @@ class Address(db.Model):
             'city': self.city,
             'district': self.district,
             'detail_address': self.detail_address,
+            'postal_code': self.postal_code,
             'is_default': self.is_default,
             'full_address': f"{self.province}{self.city}{self.district or ''}{self.detail_address}"
         }

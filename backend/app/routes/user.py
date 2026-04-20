@@ -274,7 +274,8 @@ def get_consumption_stats():
             if period == 'daily':
                 key = create_time.strftime('%Y-%m-%d')
             elif period == 'weekly':
-                key = create_time.strftime('%Y-%U')  # 年-周数
+                iso_year, iso_week, _ = create_time.isocalendar()
+                key = f'{iso_year}-{iso_week:02d}'
             else:  # monthly
                 key = create_time.strftime('%Y-%m')
             trend_map[key]['order_count'] += 1

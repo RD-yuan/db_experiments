@@ -54,11 +54,11 @@ def get_orders():
     return success_response(result)
 
 
-@order_bp.route('/<string:order_id>', methods=['GET'])
+@order_bp.route('/<int:order_id>', methods=['GET'])
 @token_required
 def get_order(order_id):
     """获取订单详情"""
-    order = Order.query.filter_by(order_id=int(order_id), user_id=g.current_user_id).first()
+    order = Order.query.filter_by(order_id=order_id, user_id=g.current_user_id).first()
 
     if not order:
         return error_response('订单不存在', 404)
@@ -231,11 +231,11 @@ def create_order():
         return error_response(f'创建失败: {str(e)}')
 
 
-@order_bp.route('/<string:order_id>/cancel', methods=['POST'])
+@order_bp.route('/<int:order_id>/cancel', methods=['POST'])
 @token_required
 def cancel_order(order_id):
     """取消订单"""
-    order = Order.query.filter_by(order_id=int(order_id), user_id=g.current_user_id).first()
+    order = Order.query.filter_by(order_id=order_id, user_id=g.current_user_id).first()
 
     if not order:
         return error_response('订单不存在', 404)
@@ -275,11 +275,11 @@ def cancel_order(order_id):
         return error_response(f'操作失败: {str(e)}')
 
 
-@order_bp.route('/<string:order_id>/pay', methods=['POST'])
+@order_bp.route('/<int:order_id>/pay', methods=['POST'])
 @token_required
 def pay_order(order_id):
     """支付订单（模拟）"""
-    order = Order.query.filter_by(order_id=int(order_id), user_id=g.current_user_id).first()
+    order = Order.query.filter_by(order_id=order_id, user_id=g.current_user_id).first()
 
     if not order:
         return error_response('订单不存在', 404)
@@ -327,11 +327,11 @@ def pay_order(order_id):
         return error_response(f'支付失败: {str(e)}')
 
 
-@order_bp.route('/<string:order_id>/receive', methods=['POST'])
+@order_bp.route('/<int:order_id>/receive', methods=['POST'])
 @token_required
 def receive_order(order_id):
     """确认收货"""
-    order = Order.query.filter_by(order_id=int(order_id), user_id=g.current_user_id).first()
+    order = Order.query.filter_by(order_id=order_id, user_id=g.current_user_id).first()
 
     if not order:
         return error_response('订单不存在', 404)
