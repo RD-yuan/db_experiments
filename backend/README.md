@@ -60,9 +60,21 @@ pip install -r requirements.txt
 
 ### 3. 配置环境变量
 
+> ⚠️ **必须操作**：将 `.env.example` 复制为 `.env`，并修改其中的数据库配置为你本地的 MySQL 连接信息。
+
 ```bash
 cp .env.example .env
-# 编辑 .env 文件，填入你的数据库配置
+```
+
+然后编辑 `.env` 文件，**至少修改以下项**：
+
+```ini
+MYSQL_HOST=localhost      # MySQL 地址
+MYSQL_USER=root           # MySQL 用户名
+MYSQL_PASSWORD=你的密码    # MySQL 密码
+MYSQL_DATABASE=ecommerce_db
+SECRET_KEY=随机字符串      # 生产环境务必修改
+JWT_SECRET_KEY=随机字符串   # 生产环境务必修改
 ```
 
 ### 4. 创建数据库

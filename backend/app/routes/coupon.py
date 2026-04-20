@@ -31,7 +31,7 @@ def get_available_coupons():
         Coupon.status == 1,
         Coupon.start_time <= now,
         Coupon.end_time >= now,
-        db.or_(Coupon.total_quantity == None, Coupon.received_count < Coupon.total_quantity)
+        Coupon.total_quantity.is_(None) | (Coupon.received_count < Coupon.total_quantity)
     ).all()
     
     # 检查用户是否已领取

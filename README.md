@@ -262,9 +262,10 @@ venv\Scripts\activate  # Windows
 # 安装依赖
 pip install -r requirements.txt
 
-# 配置环境变量
+# 配置环境变量（必须！）
 cp .env.example .env
-# 编辑 .env 文件，填入数据库配置
+# 编辑 .env 文件，修改数据库连接信息为你本地的 MySQL 配置
+# 必须修改: MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, SECRET_KEY, JWT_SECRET_KEY
 
 # 启动服务
 python run.py
