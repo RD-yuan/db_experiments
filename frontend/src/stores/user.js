@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { sessionApi } from '@/api/session-api'
+import { api } from '@/api'
 import { getToken, setToken as persistToken, removeToken } from '@/utils/auth'
 
 export const useUserStore = defineStore('user', {
@@ -32,40 +32,41 @@ export const useUserStore = defineStore('user', {
     clearAuth() {
       this.user = null
       this.token = null
+      this._ensureSessionPromise = null
       removeToken()
     },
 
     async ensureSession(force = false) {
       if (!this.token) {
         this.clearAuth()
-        return false
+        return { ok: false, reason: 'missing-token' }
       }
 
       if (!force && this.user) {
-        return true
+        return { ok: true, reason: 'cached' }
       }
 
       if (this._ensureSessionPromise) {
         return this._ensureSessionPromise
       }
 
-      this._ensureSessionPromise = sessionApi.user.getProfile()
+      const previousUser = this.user
+
+      this._ensureSessionPromise = api.user.getProfile()
         .then((user) => {
           this.setUser(user)
-          return true
+          return { ok: true, reason: 'validated' }
         })
         .catch((error) => {
           const status = error?.response?.status
 
           if (status === 401 || status === 403 || status === 404) {
             this.clearAuth()
+            return { ok: false, reason: 'invalid' }
           } else {
-            // Hide stale login UI on transient backend or DB failures,
-            // but keep the token so a later retry can still succeed.
-            this.user = null
+            this.user = previousUser
+            return { ok: false, reason: 'unreachable' }
           }
-
-          return false
         })
         .finally(() => {
           this._ensureSessionPromise = null
@@ -77,7 +78,7 @@ export const useUserStore = defineStore('user', {
     async logout() {
       try {
         if (this.token) {
-          await sessionApi.auth.logout()
+          await api.auth.logout()
         }
       } catch (error) {
         // JWT logout is client-side; still clear local auth state.
@@ -89,7 +90,8 @@ export const useUserStore = defineStore('user', {
 
   getters: {
     hasToken: (state) => !!state.token,
-    isLoggedIn: (state) => !!state.token && !!state.user,
+    hasUser: (state) => !!state.user,
+    isLoggedIn: (state) => !!state.token,
     isAdmin: (state) => state.user?.user_id === 1
   }
 })

@@ -24,6 +24,19 @@ async function clearClientSession() {
   }
 }
 
+function redirectToLogin() {
+  if (typeof window === 'undefined' || window.location.pathname === '/login') {
+    return
+  }
+
+  const redirect = `${window.location.pathname}${window.location.search}`
+  const query = redirect && redirect !== '/login'
+    ? `?redirect=${encodeURIComponent(redirect)}`
+    : ''
+
+  window.location.href = `/login${query}`
+}
+
 request.interceptors.request.use(
   config => {
     const token = getToken()
@@ -42,7 +55,7 @@ request.interceptors.response.use(
       ElMessage.error(res.message || '请求失败')
       if (res.code === 401) {
         clearClientSession()
-        window.location.href = '/login'
+        redirectToLogin()
       }
       return Promise.reject(new Error(res.message || 'Error'))
     }
@@ -63,8 +76,12 @@ request.interceptors.response.use(
       }
     }
 
-    if (status === 401 || status === 403 || (status === 404 && requestUrl.includes('/api/users/profile'))) {
+    if (status === 401 || (status === 404 && requestUrl.includes('/api/users/profile'))) {
       clearClientSession()
+
+      if (status === 401) {
+        redirectToLogin()
+      }
     }
 
     ElMessage.error(msg)

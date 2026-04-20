@@ -30,7 +30,7 @@ test('user can register, browse products, and add one item to cart', async ({ pa
         response.request().method() === 'POST' &&
         response.ok()
     }),
-    page.locator('.register-form .el-button--primary').click()
+    page.getByRole('button', { name: /注册/ }).click()
   ])
 
   await expect(page).toHaveURL(/\/home$/)

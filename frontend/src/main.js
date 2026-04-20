@@ -29,6 +29,6 @@ window.addEventListener('focus', () => {
   }
 })
 
-userStore.ensureSession(true).finally(() => {
+userStore.ensureSession().finally(() => {
   app.mount('#app')
 })
