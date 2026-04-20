@@ -102,14 +102,10 @@ const routes = [
   },
   {
     path: '/admin',
-    name: 'AdminShell',
+    redirect: '/admin/dashboard',
     component: () => import('@/views/admin/AdminShell.vue'),
     meta: { title: '管理后台', requiresAuth: true, requiresAdmin: true },
     children: [
-      {
-        path: '',
-        redirect: '/admin/dashboard'
-      },
       {
         path: 'dashboard',
         name: 'Dashboard',
