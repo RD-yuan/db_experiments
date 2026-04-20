@@ -297,7 +297,6 @@ class Order(db.Model):
     items = db.relationship('OrderItem', backref='order', lazy='dynamic', cascade='all, delete-orphan')
     
     STATUS_TEXT = {
-
         0: '待支付',
         1: '已支付',
         2: '已发货',
@@ -308,7 +307,7 @@ class Order(db.Model):
     
     def to_dict(self):
         return {
-            'order_id': self.order_id,
+            'order_id': str(self.order_id),  # 关键修改：转为字符串，避免前端精度丢失
             'total_amount': float(self.total_amount),
             'freight_amount': float(self.freight_amount) if self.freight_amount else 0,
             'discount_amount': float(self.discount_amount) if self.discount_amount else 0,

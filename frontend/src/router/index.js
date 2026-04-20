@@ -41,6 +41,12 @@ const routes = [
         component: () => import('@/views/order/List.vue'),
         meta: { title: '我的订单', requiresAuth: true }
       },
+       {
+        path: 'orders/create',
+        name: 'OrderCreate',
+        component: () => import('@/views/order/Create.vue'),
+        meta: { title: '确认订单', requiresAuth: true }
+      },
       {
         path: 'order/:id',
         name: 'OrderDetail',
