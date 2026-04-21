@@ -47,7 +47,6 @@ def get_orders():
     result = paginate(query, page, per_page)
 
     # 为每个订单添加商品明细
-    # 注意：此时 result['items'] 中的 order_id 已经是字符串
     for order_data in result['items']:
         order = db.session.get(Order, int(order_data['order_id']))
         order_data['items'] = [item.to_dict() for item in order.items]
@@ -55,18 +54,23 @@ def get_orders():
     return success_response(result)
 
 
-@order_bp.route('/<int:order_id>', methods=['GET'])
+@order_bp.route('/<string:order_id>', methods=['GET'])
 @token_required
 def get_order(order_id):
     """获取订单详情"""
-    order = Order.query.filter_by(order_id=order_id, user_id=g.current_user_id).first()
+    from app.models.models import User
+    user = db.session.get(User, g.current_user_id)
+    
+    if user and user.is_admin:
+        order = Order.query.filter_by(order_id=int(order_id)).first()
+    else:
+        order = Order.query.filter_by(order_id=int(order_id), user_id=g.current_user_id).first()
 
     if not order:
         return error_response('订单不存在', 404)
 
     data = order.to_dict()
     data['items'] = [item.to_dict() for item in order.items]
-
     return success_response(data)
 
 
@@ -107,12 +111,10 @@ def create_order():
     points_used = data.get('points_used', 0)
     buyer_note = data.get('buyer_note', '')
 
-    # 验证地址
     address = Address.query.filter_by(address_id=address_id, user_id=user_id).first()
     if not address:
         return error_response('地址不存在')
 
-    # 获取购物车商品
     if cart_ids:
         cart_items = ShoppingCart.query.filter(
             ShoppingCart.cart_id.in_(cart_ids),
@@ -124,7 +126,6 @@ def create_order():
     if not cart_items:
         return error_response('购物车为空')
 
-    # 计算金额
     total_amount = 0
     order_items = []
 
@@ -149,26 +150,19 @@ def create_order():
             'subtotal': subtotal
         })
 
-    # 优惠券折扣（简化处理）
     discount_amount = 0
-
-    # 积分抵扣
     user = db.session.get(User, user_id)
     points_discount = 0
     if points_used > 0:
         if points_used > user.points:
             return error_response('积分不足')
-        points_discount = min(points_used * 0.01, total_amount - discount_amount)  # 100积分=1元
+        points_discount = min(points_used * 0.01, total_amount - discount_amount)
         points_used = int(points_discount * 100)
 
-    # 计算实付金额
-    freight_amount = 0 if total_amount >= 99 else 10  # 满99包邮
+    freight_amount = 0 if total_amount >= 99 else 10
     payment_amount = total_amount + freight_amount - discount_amount - points_discount
-
-    # 生成订单号
     order_id = generate_order_id()
 
-    # 创建订单
     order = Order(
         order_id=order_id,
         user_id=user_id,
@@ -184,9 +178,8 @@ def create_order():
 
     try:
         db.session.add(order)
-        db.session.flush()  # 获取 order_id
+        db.session.flush()
 
-        # 创建订单明细
         for item_data in order_items:
             order_item = OrderItem(
                 order_id=order_id,
@@ -198,22 +191,18 @@ def create_order():
                 subtotal=item_data['subtotal']
             )
             db.session.add(order_item)
-
-            # 锁定库存
             if item_data['product'].locked_stock is None:
                 item_data['product'].locked_stock = 0
             item_data['product'].locked_stock += item_data['quantity']
 
-        # 删除购物车
         for item in cart_items:
             db.session.delete(item)
 
-        # 扣减积分
         if points_used > 0:
             user.points -= points_used
             points_log = PointsLog(
                 user_id=user_id,
-                type=2,  # 支出
+                type=2,
                 amount=points_used,
                 balance_after=user.points,
                 source='ORDER',
@@ -223,9 +212,8 @@ def create_order():
             db.session.add(points_log)
 
         db.session.commit()
-
         return success_response({
-            'order_id': str(order_id),  # 返回字符串，确保前端精度
+            'order_id': str(order_id),
             'payment_amount': float(payment_amount)
         }, '订单创建成功')
 
@@ -234,11 +222,11 @@ def create_order():
         return error_response(f'创建失败: {str(e)}')
 
 
-@order_bp.route('/<int:order_id>/cancel', methods=['POST'])
+@order_bp.route('/<string:order_id>/cancel', methods=['POST'])
 @token_required
 def cancel_order(order_id):
     """取消订单"""
-    order = Order.query.filter_by(order_id=order_id, user_id=g.current_user_id).first()
+    order = Order.query.filter_by(order_id=int(order_id), user_id=g.current_user_id).first()
 
     if not order:
         return error_response('订单不存在', 404)
@@ -247,15 +235,13 @@ def cancel_order(order_id):
         return error_response('只能取消待支付订单')
 
     try:
-        # 释放锁定库存
         for item in order.items:
             product = item.product
             if product:
                 product.locked_stock -= item.quantity
 
-        order.status = 4  # 已取消
+        order.status = 4
 
-        # 退还积分
         if order.points_used > 0:
             user = order.user
             user.points += order.points_used
@@ -278,11 +264,11 @@ def cancel_order(order_id):
         return error_response(f'操作失败: {str(e)}')
 
 
-@order_bp.route('/<int:order_id>/pay', methods=['POST'])
+@order_bp.route('/<string:order_id>/pay', methods=['POST'])
 @token_required
 def pay_order(order_id):
-    """支付订单（包含余额检查与扣款）"""
-    order = Order.query.filter_by(order_id=order_id, user_id=g.current_user_id).first()
+    """支付订单（模拟）"""
+    order = Order.query.filter_by(order_id=int(order_id), user_id=g.current_user_id).first()
 
     if not order:
         return error_response('订单不存在', 404)
@@ -290,21 +276,13 @@ def pay_order(order_id):
     if order.status != 0:
         return error_response('订单状态不正确')
 
-    # 获取用户信息
     user = order.user
-
-    # 核心修复：余额校验
-    # 假设 payment_method = 3 是“余额支付”
-    
     if user.balance < order.payment_amount:
         return error_response('账户余额不足，请先充值')
 
     try:
-        # 1. 执行扣款 (仅当使用余额支付时)
-        
         user.balance -= order.payment_amount
 
-        # 2. 扣减库存 (原逻辑)
         for item in order.items:
             product = item.product
             if product:
@@ -314,12 +292,10 @@ def pay_order(order_id):
                 product.locked_stock -= item.quantity
                 product.sold_count += item.quantity
 
-        # 3. 更新订单状态
-        order.status = 1  # 已支付
+        order.status = 1
         order.payment_time = datetime.utcnow()
         order.transaction_id = f"PAY_{order_id}"
 
-        # 4. 赠送积分 (原逻辑)
         earned_points = int(float(order.payment_amount))
         user.points += earned_points
 
@@ -342,26 +318,29 @@ def pay_order(order_id):
         return error_response(f'支付失败: {str(e)}')
 
 
-@order_bp.route('/<int:order_id>/receive', methods=['POST'])
+@order_bp.route('/<string:order_id>/receive', methods=['POST'])
 @token_required
 def receive_order(order_id):
-    """确认收货"""
-    order = Order.query.filter_by(order_id=order_id, user_id=g.current_user_id).first()
+    """确认收货（仅限订单所属用户）"""
+    from app.models.models import User
+    user = db.session.get(User, g.current_user_id)
+    order = Order.query.filter_by(order_id=int(order_id)).first()
 
     if not order:
         return error_response('订单不存在', 404)
+
+    # 只有订单所有者可以确认收货，管理员也不能代替
+    if order.user_id != g.current_user_id:
+        return error_response('无权操作此订单', 403)
 
     if order.status != 2:
         return error_response('只能确认已发货的订单')
 
     try:
-        from datetime import datetime
-        order.status = 3  # 已完成
+        order.status = 3
         order.receive_time = datetime.utcnow()
-
         db.session.commit()
         return success_response(message='已确认收货')
-
     except Exception as e:
         db.session.rollback()
         return error_response(f'操作失败: {str(e)}')

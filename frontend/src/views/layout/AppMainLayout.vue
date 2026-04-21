@@ -3,7 +3,13 @@
     <el-header class="header">
       <router-link class="logo" to="/home">电商平台</router-link>
 
-      <nav class="nav">
+      <!-- 管理员导航 -->
+      <nav v-if="userStore.isAdmin" class="nav">
+        <router-link to="/admin">管理后台</router-link>
+      </nav>
+
+      <!-- 普通用户导航 -->
+      <nav v-else class="nav">
         <router-link to="/home">首页</router-link>
         <router-link to="/products">全部商品</router-link>
         <router-link to="/cart">
@@ -12,18 +18,27 @@
         <router-link to="/orders">我的订单</router-link>
       </nav>
 
+      <!-- 已登录用户区域 -->
       <div v-if="userStore.isLoggedIn" class="user-actions">
         <el-dropdown>
           <span class="user-name">{{ userStore.user?.username || userStore.user?.phone || '已登录用户' }}</span>
           <template #dropdown>
             <el-dropdown-menu>
-              <el-dropdown-item @click="router.push('/user/profile')">个人中心</el-dropdown-item>
-              <el-dropdown-item @click="handleLogout">退出登录</el-dropdown-item>
+              <!-- 管理员下拉菜单只有退出 -->
+              <template v-if="userStore.isAdmin">
+                <el-dropdown-item @click="handleLogout">退出登录</el-dropdown-item>
+              </template>
+              <!-- 普通用户下拉菜单 -->
+              <template v-else>
+                <el-dropdown-item @click="router.push('/user/profile')">个人中心</el-dropdown-item>
+                <el-dropdown-item @click="handleLogout">退出登录</el-dropdown-item>
+              </template>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
       </div>
 
+      <!-- 未登录区域 -->
       <div v-else class="auth-links">
         <router-link to="/login">登录</router-link>
         <router-link to="/register">注册</router-link>

@@ -92,6 +92,6 @@ export const useUserStore = defineStore('user', {
     hasToken: (state) => !!state.token,
     hasUser: (state) => !!state.user,
     isLoggedIn: (state) => !!state.token,
-    isAdmin: (state) => state.user?.user_id === 1
+    isAdmin: (state) => !!state.user?.is_admin
   }
 })

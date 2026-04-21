@@ -4,8 +4,6 @@ import { ElMessage } from 'element-plus'
 import { getToken, removeToken } from '@/utils/auth'
 
 const request = axios.create({
-  // Default to same-origin requests so remote browsers don't resolve "localhost"
-  // to themselves. In development, vue.config.js proxies /api to the backend.
   baseURL: process.env.VUE_APP_API_BASE_URL || '',
   timeout: 15000
 })
@@ -145,6 +143,8 @@ const api = {
   review: {
     getProductReviews: (productId, params) => request.get(`/api/reviews/product/${productId}`, { params }),
     create: (data) => request.post('/api/reviews', data),
+    update: (id, data) => request.put(`/api/reviews/${id}`, data),
+    delete: (id) => request.delete(`/api/reviews/${id}`),
     getMy: (params) => request.get('/api/reviews/my', { params })
   },
 
@@ -160,7 +160,10 @@ const api = {
     createProduct: (data) => request.post('/api/products', data),
     updateProduct: (id, data) => request.put(`/api/products/${id}`, data),
     deleteProduct: (id) => request.delete(`/api/products/${id}`),
-    createCategory: (data) => request.post('/api/categories', data)
+    createCategory: (data) => request.post('/api/categories', data),
+    offShelfProduct: (id) => request.put(`/api/admin/products/${id}/off-shelf`),
+    onShelfProduct: (id) => request.put(`/api/products/${id}`, { status: 1 }), // 上架
+    deleteProductPermanently: (id) => request.delete(`/api/admin/products/${id}/permanent`),
   }
 }
 

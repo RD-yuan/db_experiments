@@ -60,11 +60,20 @@
         </div>
         
         <div class="action-buttons">
-          <el-button type="primary" size="large" :disabled="product.available_stock === 0" @click="addToCart">
+          <el-button
+            type="primary"
+            size="large"
+            :disabled="product.available_stock === 0 || product.status !== 1"
+            @click="addToCart"
+          >
             <el-icon><ShoppingCartFull /></el-icon>
-            加入购物车
+            {{ product.status === 1 ? '加入购物车' : '已下架' }}
           </el-button>
-          <el-button size="large" @click="buyNow" :disabled="product.available_stock === 0">
+          <el-button
+            size="large"
+            @click="buyNow"
+            :disabled="product.available_stock === 0 || product.status !== 1"
+          >
             立即购买
           </el-button>
           <el-button size="large" @click="goBack">

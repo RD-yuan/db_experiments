@@ -128,25 +128,19 @@ def token_required(f):
 
 
 def admin_required(f):
-    """
-    管理员权限装饰器
-    """
     @wraps(f)
     @token_required
     def decorated(*args, **kwargs):
         from app.models.models import User
         from app import db
-        
         user = db.session.get(User, g.current_user_id)
-        if not user or user.user_id != 1:  # 简单判断：user_id=1 为管理员
+        if not user or not user.is_admin:
             return jsonify({
                 'code': 403,
                 'message': '需要管理员权限',
                 'data': None
             }), 403
-        
         return f(*args, **kwargs)
-    
     return decorated
 
 

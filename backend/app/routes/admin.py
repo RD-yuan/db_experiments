@@ -1,10 +1,10 @@
 """
 管理员路由
 """
-from flask import Blueprint, request, g
+from flask import Blueprint, request, g, current_app
 from flasgger import swag_from
 from app import db
-from app.models.models import User, Product, Order, OperationLog
+from app.models.models import User, Product, Order, OperationLog, OrderItem, PointsLog, ShoppingCart, Review
 from app.utils.helpers import (
     success_response, error_response, admin_required, paginate
 )
@@ -27,18 +27,13 @@ admin_bp = Blueprint('admin', __name__)
         {'name': 'per_page', 'in': 'query', 'type': 'integer', 'default': 20},
         {'name': 'keyword', 'in': 'query', 'type': 'string'}
     ],
-    'responses': {
-        200: {'description': '用户列表'}
-    }
+    'responses': {200: {'description': '用户列表'}}
 })
 def get_users():
-    """获取用户列表"""
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
     keyword = request.args.get('keyword', '').strip()
-    
     query = User.query
-    
     if keyword:
         query = query.filter(
             db.or_(
@@ -47,30 +42,23 @@ def get_users():
                 User.email.like(f'%{keyword}%')
             )
         )
-    
     query = query.order_by(User.create_time.desc())
     result = paginate(query, page, per_page)
-    
     return success_response(result)
 
 
 @admin_bp.route('/users/<int:user_id>/status', methods=['PUT'])
 @admin_required
 def update_user_status(user_id):
-    """启用/禁用用户"""
     data = request.get_json()
     status = data.get('status')
-    
     if status not in [0, 1]:
         return error_response('状态值无效')
-    
     user = db.session.get(User, user_id)
     if not user:
         return error_response('用户不存在', 404)
-    
     if user.user_id == 1:
         return error_response('不能禁用管理员')
-    
     try:
         user.status = status
         db.session.commit()
@@ -83,19 +71,14 @@ def update_user_status(user_id):
 @admin_bp.route('/users/<int:user_id>/vip', methods=['PUT'])
 @admin_required
 def set_user_vip(user_id):
-    """设置用户VIP"""
     data = request.get_json()
-    
     user = db.session.get(User, user_id)
     if not user:
         return error_response('用户不存在', 404)
-    
     user.is_vip = data.get('is_vip', 0)
     user.vip_level = data.get('vip_level', 0)
-    
     if data.get('vip_months'):
         user.vip_expire_time = datetime.utcnow() + timedelta(days=data['vip_months'] * 30)
-    
     try:
         db.session.commit()
         return success_response(user.to_dict(), '设置成功')
@@ -109,47 +92,35 @@ def set_user_vip(user_id):
 @admin_bp.route('/orders', methods=['GET'])
 @admin_required
 def get_all_orders():
-    """获取所有订单"""
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
     status = request.args.get('status', type=int)
-    
     query = Order.query
-    
     if status is not None:
         query = query.filter_by(status=status)
-    
     query = query.order_by(Order.create_time.desc())
     result = paginate(query, page, per_page)
-    
     return success_response(result)
 
 
 @admin_bp.route('/orders/<int:order_id>/ship', methods=['POST'])
 @admin_required
 def ship_order(order_id):
-    """发货"""
     order = db.session.get(Order, order_id)
-    
     if not order:
         return error_response('订单不存在', 404)
-    
     if order.status != 1:
         return error_response('只能发货已支付订单')
-    
     data = request.get_json()
     shipping_company = data.get('shipping_company')
     shipping_number = data.get('shipping_number')
-    
     if not shipping_company or not shipping_number:
         return error_response('物流信息不完整')
-    
     try:
         order.status = 2
         order.shipping_company = shipping_company
         order.shipping_number = shipping_number
         order.shipping_time = datetime.utcnow()
-        
         db.session.commit()
         return success_response(message='发货成功')
     except Exception as e:
@@ -162,39 +133,22 @@ def ship_order(order_id):
 @admin_bp.route('/stats/overview', methods=['GET'])
 @admin_required
 def get_overview():
-    """数据概览"""
-    # 今日日期
     today = datetime.utcnow().date()
     today_start = datetime.combine(today, datetime.min.time())
-    
-    # 总用户数
     total_users = User.query.count()
-    
-    # 今日新增用户
     new_users_today = User.query.filter(User.create_time >= today_start).count()
-    
-    # 总订单数
     total_orders = Order.query.count()
-    
-    # 今日订单数
     orders_today = Order.query.filter(Order.create_time >= today_start).count()
-    
-    # 今日销售额
     today_sales = db.session.query(
         func.sum(Order.payment_amount)
     ).filter(
         Order.create_time >= today_start,
         Order.status.in_([1, 2, 3])
     ).scalar() or 0
-    
-    # 总销售额
     total_sales = db.session.query(
         func.sum(Order.payment_amount)
     ).filter(Order.status.in_([1, 2, 3])).scalar() or 0
-    
-    # 商品数量
     total_products = Product.query.count()
-    
     return success_response({
         'total_users': total_users,
         'new_users_today': new_users_today,
@@ -209,25 +163,16 @@ def get_overview():
 @admin_bp.route('/stats/hot-products', methods=['GET'])
 @admin_required
 def get_hot_products():
-    """热销商品Top10"""
     limit = request.args.get('limit', 10, type=int)
-    
-    products = Product.query.filter_by(status=1).order_by(
-        Product.sold_count.desc()
-    ).limit(limit).all()
-    
+    products = Product.query.filter_by(status=1).order_by(Product.sold_count.desc()).limit(limit).all()
     return success_response([p.to_dict() for p in products])
 
 
 @admin_bp.route('/stats/sales-trend', methods=['GET'])
 @admin_required
 def get_sales_trend():
-    """销售趋势（最近7天）"""
     days = request.args.get('days', 7, type=int)
-    
     start_date = datetime.utcnow() - timedelta(days=days)
-    
-    # 按日期统计
     result = db.session.query(
         func.date(Order.create_time).label('date'),
         func.count(Order.order_id).label('order_count'),
@@ -235,14 +180,95 @@ def get_sales_trend():
     ).filter(
         Order.create_time >= start_date,
         Order.status.in_([1, 2, 3])
-    ).group_by(
-        func.date(Order.create_time)
-    ).all()
-    
+    ).group_by(func.date(Order.create_time)).all()
     trend = [{
         'date': str(r.date),
         'order_count': r.order_count,
         'sales_amount': float(r.sales_amount or 0)
     } for r in result]
-    
     return success_response(trend)
+
+
+# ============ 商品管理 ============
+
+@admin_bp.route('/products/<int:product_id>/off-shelf', methods=['PUT'])
+@admin_required
+def off_shelf_product(product_id):
+    """下架商品，并自动取消相关未完成订单（待支付/已支付）"""
+    product = db.session.get(Product, product_id)
+    if not product:
+        return error_response('商品不存在', 404)
+    if product.status == 0:
+        return error_response('商品已是下架状态')
+
+    try:
+        product.status = 0
+
+        # 查询包含该商品且状态为待支付(0)或已支付(1)的订单
+        affected_orders = db.session.query(Order).join(OrderItem).filter(
+            OrderItem.product_id == product_id,
+            Order.status.in_([0, 1])
+        ).distinct().all()
+
+        for order in affected_orders:
+            if order.status == 1:  # 已支付订单退款
+                user = order.user
+                refund_amount = float(order.payment_amount)
+                user.balance += refund_amount
+
+                if order.points_used > 0:
+                    user.points += order.points_used
+                    points_log = PointsLog(
+                        user_id=user.user_id,
+                        type=1,
+                        amount=order.points_used,
+                        balance_after=user.points,
+                        source='REFUND',
+                        source_id=str(order.order_id),
+                        description=f'订单 {order.order_id} 因商品下架退款退还积分'
+                    )
+                    db.session.add(points_log)
+
+                # 恢复库存（仅恢复该商品数量）
+                order_items = OrderItem.query.filter_by(order_id=order.order_id, product_id=product_id).all()
+                for item in order_items:
+                    product.stock += item.quantity
+                    product.sold_count -= item.quantity
+
+            else:  # 待支付订单释放锁定库存
+                order_items = OrderItem.query.filter_by(order_id=order.order_id, product_id=product_id).all()
+                for item in order_items:
+                    product.locked_stock = max(0, (product.locked_stock or 0) - item.quantity)
+
+            order.status = 4  # 已取消
+            order.update_time = datetime.utcnow()
+
+        db.session.commit()
+        return success_response(message='商品已下架，相关未完成订单已取消并退款')
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f'下架商品失败: {str(e)}')
+        return error_response(f'下架失败: {str(e)}')
+
+
+@admin_bp.route('/products/<int:product_id>/permanent', methods=['DELETE'])
+@admin_required
+def delete_product_permanently(product_id):
+    """永久删除商品（仅当无关联订单记录）"""
+    product = db.session.get(Product, product_id)
+    if not product:
+        return error_response('商品不存在', 404)
+
+    order_item_count = OrderItem.query.filter_by(product_id=product_id).count()
+    if order_item_count > 0:
+        return error_response('该商品已有订单记录，无法永久删除，建议下架', 400)
+
+    try:
+        ShoppingCart.query.filter_by(product_id=product_id).delete()
+        Review.query.filter_by(product_id=product_id).delete()
+        db.session.delete(product)
+        db.session.commit()
+        return success_response(message='商品已永久删除')
+    except Exception as e:
+        db.session.rollback()
+        return error_response(f'删除失败: {str(e)}')

@@ -27,6 +27,7 @@ class User(db.Model):
     last_login_ip = db.Column(db.String(50))
     create_time = db.Column(db.DateTime, default=datetime.utcnow)
     update_time = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_admin = db.Column(db.SmallInteger, default=0)  # 0-普通用户 1-管理员
     
     # 关联
     addresses = db.relationship('Address', backref='user', lazy='dynamic', cascade='all, delete-orphan')
@@ -49,6 +50,7 @@ class User(db.Model):
             'points': self.points,
             'balance': float(self.balance) if self.balance else 0, # 新增返回余额
             'status': self.status,
+            'is_admin': bool(self.is_admin),
             'create_time': self.create_time.isoformat() if self.create_time else None
         }
 
@@ -154,6 +156,27 @@ class Address(db.Model):
     update_time = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     def to_dict(self):
+        # 安全获取字符串值，避免 None
+        province = self.province or ''
+        city = self.city or ''
+        district = self.district or ''
+        detail = self.detail_address or ''
+
+        # 处理省级后缀
+        if province:
+            if province not in ('北京市', '天津市', '上海市', '重庆市', '香港特别行政区', '澳门特别行政区') and not province.endswith('省'):
+                province += '省'
+        # 处理市级后缀
+        if city:
+            if city not in ('北京市', '天津市', '上海市', '重庆市') and not city.endswith('市'):
+                city += '市'
+        # 处理区级后缀
+        if district:
+            if not (district.endswith('区') or district.endswith('县')):
+                district += '区'
+
+        full_addr = f"{province}{city}{district}{detail}"
+
         return {
             'address_id': self.address_id,
             'recipient_name': self.recipient_name,
@@ -164,7 +187,7 @@ class Address(db.Model):
             'detail_address': self.detail_address,
             'postal_code': self.postal_code,
             'is_default': self.is_default,
-            'full_address': f"{self.province}{self.city}{self.district or ''}{self.detail_address}"
+            'full_address': full_addr
         }
 
 
@@ -311,6 +334,7 @@ class Order(db.Model):
     def to_dict(self):
         return {
             'order_id': str(self.order_id),  # 关键修改：转为字符串，避免前端精度丢失
+            'user_id': self.user_id,
             'total_amount': float(self.total_amount),
             'freight_amount': float(self.freight_amount) if self.freight_amount else 0,
             'discount_amount': float(self.discount_amount) if self.discount_amount else 0,
