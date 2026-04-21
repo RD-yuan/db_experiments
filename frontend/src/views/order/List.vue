@@ -79,9 +79,11 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '@/api'
+import { useUserStore } from '@/stores/user'
 import dayjs from 'dayjs'
 
 const router = useRouter()
+const userStore = useUserStore()
 
 const loading = ref(false)
 const orders = ref([])
@@ -132,13 +134,22 @@ const formatDate = (date) => {
   return dayjs(date).format('YYYY-MM-DD HH:mm:ss')
 }
 
+const formatMoney = (value) => Number(value || 0).toFixed(2)
+
 const handlePay = async (orderId) => {
   try {
+    const order = orders.value.find(item => String(item.order_id) === String(orderId))
+    await ElMessageBox.confirm(
+      `将使用账户余额支付 ¥${formatMoney(order?.payment_amount)}，当前余额 ¥${formatMoney(userStore.user?.balance)}。确定支付吗？`,
+      '余额支付',
+      { type: 'warning' }
+    )
     await api.order.pay(String(orderId))
     ElMessage.success('支付成功')
+    await userStore.ensureSession(true)
     loadOrders()
   } catch (error) {
-    console.error('支付失败:', error)
+    if (error !== 'cancel') console.error('支付失败:', error)
   }
 }
 

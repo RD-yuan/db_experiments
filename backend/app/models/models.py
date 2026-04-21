@@ -36,8 +36,25 @@ class User(db.Model):
     reviews = db.relationship('Review', backref='user', lazy='dynamic')
     user_coupons = db.relationship('UserCoupon', backref='user', lazy='dynamic', cascade='all, delete-orphan')
     points_logs = db.relationship('PointsLog', backref='user', lazy='dynamic')
+
+    VIP_LEVEL_TEXT = {
+        0: '非会员',
+        1: '银卡',
+        2: '金卡',
+        3: '钻石卡',
+    }
+
+    def has_active_vip(self):
+        """Stored VIP flags only grant pricing benefits before expiry."""
+        if not self.is_vip or not self.vip_level:
+            return False
+        if self.vip_expire_time and self.vip_expire_time <= datetime.utcnow():
+            return False
+        return True
     
     def to_dict(self):
+        vip_active = self.has_active_vip()
+        vip_level = self.vip_level if vip_active else 0
         return {
             'user_id': self.user_id,
             'username': self.username,
@@ -45,8 +62,12 @@ class User(db.Model):
             'email': self.email,
             'avatar': self.avatar,
             'gender': self.gender,
+            'birthday': self.birthday.isoformat() if self.birthday else None,
             'is_vip': self.is_vip,
             'vip_level': self.vip_level,
+            'vip_active': vip_active,
+            'vip_level_text': self.VIP_LEVEL_TEXT.get(vip_level, '非会员'),
+            'vip_expire_time': self.vip_expire_time.isoformat() if self.vip_expire_time else None,
             'points': self.points,
             'balance': float(self.balance) if self.balance else 0, # 新增返回余额
             'status': self.status,

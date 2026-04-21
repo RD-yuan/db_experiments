@@ -24,10 +24,18 @@
         <el-table-column prop="username" label="用户名" />
         <el-table-column prop="phone" label="手机号" width="140" />
         <el-table-column prop="email" label="邮箱" width="200" />
-        <el-table-column label="VIP" width="80">
+        <el-table-column label="会员卡" width="110">
           <template #default="{ row }">
-            <el-tag v-if="row.is_vip" type="warning" size="small">VIP{{ row.vip_level }}</el-tag>
+            <el-tag v-if="row.vip_active" type="warning" size="small">
+              {{ vipCardName(row.vip_level) }}
+            </el-tag>
+            <el-tag v-else-if="row.is_vip" type="info" size="small">已过期</el-tag>
             <span v-else>-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="会员到期" width="180">
+          <template #default="{ row }">
+            {{ formatVipExpiry(row.vip_expire_time) }}
           </template>
         </el-table-column>
         <el-table-column label="状态" width="80">
@@ -75,15 +83,24 @@
         <el-form-item label="用户">
           <span>{{ currentUser?.username }}</span>
         </el-form-item>
-        <el-form-item label="VIP等级">
-          <el-select v-model="vipForm.vip_level" placeholder="请选择">
+        <el-form-item label="会员状态">
+          <el-switch
+            v-model="vipForm.is_vip"
+            :active-value="1"
+            :inactive-value="0"
+            active-text="发放"
+            inactive-text="取消"
+          />
+        </el-form-item>
+        <el-form-item label="会员等级">
+          <el-select v-model="vipForm.vip_level" placeholder="请选择" :disabled="!vipForm.is_vip">
             <el-option label="银卡" :value="1" />
             <el-option label="金卡" :value="2" />
-            <el-option label="钻石" :value="3" />
+            <el-option label="钻石卡" :value="3" />
           </el-select>
         </el-form-item>
         <el-form-item label="有效期(月)">
-          <el-input-number v-model="vipForm.vip_months" :min="1" :max="120" />
+          <el-input-number v-model="vipForm.vip_months" :min="1" :max="120" :disabled="!vipForm.is_vip" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -116,6 +133,20 @@ const vipForm = ref({
 })
 
 const formatDate = (date) => dayjs(date).format('YYYY-MM-DD HH:mm')
+
+const vipCardName = (level) => {
+  const names = {
+    1: '银卡',
+    2: '金卡',
+    3: '钻石卡'
+  }
+  return names[level] || '会员'
+}
+
+const formatVipExpiry = (date) => {
+  if (!date) return '-'
+  return dayjs(date).format('YYYY-MM-DD HH:mm')
+}
 
 const loadUsers = async () => {
   loading.value = true
@@ -157,7 +188,7 @@ const handleToggleStatus = async (row) => {
 const handleSetVip = (row) => {
   currentUser.value = row
   vipForm.value = {
-    is_vip: 1,
+    is_vip: row.is_vip ? 1 : 0,
     vip_level: row.vip_level || 1,
     vip_months: 1
   }
@@ -166,8 +197,11 @@ const handleSetVip = (row) => {
 
 const submitVip = async () => {
   try {
-    await api.admin.setUserVip(currentUser.value.user_id, vipForm.value)
-    ElMessage.success('VIP设置成功')
+    const payload = vipForm.value.is_vip
+      ? vipForm.value
+      : { is_vip: 0, vip_level: 0, vip_months: 0 }
+    await api.admin.setUserVip(currentUser.value.user_id, payload)
+    ElMessage.success(vipForm.value.is_vip ? '会员卡设置成功' : '会员资格已取消')
     vipDialogVisible.value = false
     loadUsers()
   } catch (error) {

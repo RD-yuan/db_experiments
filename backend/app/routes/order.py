@@ -16,6 +16,14 @@ from datetime import datetime
 order_bp = Blueprint('order', __name__)
 
 
+def _get_effective_product_price(product, user):
+    normal_price = product.price or Decimal('0.00')
+    vip_price = product.vip_price
+    if user and user.has_active_vip() and vip_price and vip_price > 0 and vip_price < normal_price:
+        return vip_price
+    return normal_price
+
+
 @order_bp.route('', methods=['GET'])
 @token_required
 @swag_from({
@@ -104,12 +112,20 @@ def get_order(order_id):
 def create_order():
     """创建订单"""
     user_id = g.current_user_id
-    data = request.get_json()
+    data = request.get_json() or {}
 
     address_id = data.get('address_id')
     cart_ids = data.get('cart_ids', [])
-    points_used = data.get('points_used', 0)
+    try:
+        points_used = int(data.get('points_used', 0) or 0)
+    except (TypeError, ValueError):
+        return error_response('积分参数格式错误')
+    if points_used < 0:
+        return error_response('积分不能为负数')
     buyer_note = data.get('buyer_note', '')
+    user = db.session.get(User, user_id)
+    if not user:
+        return error_response('用户不存在', 404)
 
     address = Address.query.filter_by(address_id=address_id, user_id=user_id).first()
     if not address:
@@ -126,7 +142,7 @@ def create_order():
     if not cart_items:
         return error_response('购物车为空')
 
-    total_amount = 0
+    total_amount = Decimal('0.00')
     order_items = []
 
     for item in cart_items:
@@ -136,7 +152,7 @@ def create_order():
         if item.product.available_stock < item.quantity:
             return error_response(f'商品 {item.product.name} 库存不足')
 
-        price = float(item.product.price)
+        price = _get_effective_product_price(item.product, user)
         subtotal = price * item.quantity
         total_amount += subtotal
 
@@ -150,16 +166,15 @@ def create_order():
             'subtotal': subtotal
         })
 
-    discount_amount = 0
-    user = db.session.get(User, user_id)
-    points_discount = 0
+    discount_amount = Decimal('0.00')
+    points_discount = Decimal('0.00')
     if points_used > 0:
         if points_used > user.points:
             return error_response('积分不足')
-        points_discount = min(points_used * 0.01, total_amount - discount_amount)
+        points_discount = min(Decimal(points_used) * Decimal('0.01'), total_amount - discount_amount)
         points_used = int(points_discount * 100)
 
-    freight_amount = 0 if total_amount >= 99 else 10
+    freight_amount = Decimal('0.00') if total_amount >= Decimal('99.00') else Decimal('10.00')
     payment_amount = total_amount + freight_amount - discount_amount - points_discount
     order_id = generate_order_id()
 
@@ -294,6 +309,7 @@ def pay_order(order_id):
                 product.sold_count += item.quantity
 
         order.status = 1
+        order.payment_method = 3
         order.payment_time = datetime.utcnow()
         order.transaction_id = f"PAY_{order_id}"
 

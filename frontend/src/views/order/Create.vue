@@ -28,9 +28,14 @@
             <el-image :src="item.product.main_image" class="product-img" fit="contain" />
             <div class="product-info">
               <h4>{{ item.product.name }}</h4>
-              <span>¥{{ item.product.price }} x {{ item.quantity }}</span>
+              <span>
+                ¥{{ getEffectivePrice(item.product).toFixed(2) }} x {{ item.quantity }}
+                <em v-if="hasActiveVip && hasProductVipPrice(item.product)">
+                  会员价已生效，原价 ¥{{ Number(item.product.price || 0).toFixed(2) }}
+                </em>
+              </span>
             </div>
-            <div class="item-total">¥{{ (item.product.price * item.quantity).toFixed(2) }}</div>
+            <div class="item-total">¥{{ (getEffectivePrice(item.product) * item.quantity).toFixed(2) }}</div>
           </div>
         </div>
       </div>
@@ -67,16 +72,38 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { api } from '@/api'
+import { useUserStore } from '@/stores/user'
 
 export default {
   name: 'OrderCreate',
   setup() {
     const router = useRouter()
     const route = useRoute()
+    const userStore = useUserStore()
     const loading = ref(true)
     const addresses = ref([])
     const selectedAddressId = ref(null)
     const orderItems = ref([])
+
+    const hasActiveVip = computed(() => {
+      const user = userStore.user
+      if (!user?.vip_active) return false
+      if (!user.vip_expire_time) return true
+      return new Date(user.vip_expire_time).getTime() > Date.now()
+    })
+
+    const hasProductVipPrice = (product) => {
+      const vipPrice = Number(product?.vip_price || 0)
+      const price = Number(product?.price || 0)
+      return vipPrice > 0 && vipPrice < price
+    }
+
+    const getEffectivePrice = (product) => {
+      if (hasActiveVip.value && hasProductVipPrice(product)) {
+        return Number(product.vip_price)
+      }
+      return Number(product?.price || 0)
+    }
 
     // 从路由 query 获取 cart_ids 并加载购物车中选中的商品
     const loadCartItems = async () => {
@@ -118,7 +145,7 @@ export default {
     // 计算总金额
     const totalAmount = computed(() => {
       return orderItems.value.reduce((sum, item) => {
-        return sum + item.product.price * item.quantity
+        return sum + getEffectivePrice(item.product) * item.quantity
       }, 0)
     })
 
@@ -159,6 +186,9 @@ export default {
       addresses,
       selectedAddressId,
       orderItems,
+      hasActiveVip,
+      hasProductVipPrice,
+      getEffectivePrice,
       totalAmount,
       freight,
       submitOrder
@@ -213,6 +243,12 @@ export default {
     .product-info {
       flex: 1;
       h4 { margin-bottom: 5px; }
+      em {
+        margin-left: 8px;
+        color: #67c23a;
+        font-size: 12px;
+        font-style: normal;
+      }
     }
     .item-total {
       font-weight: bold;

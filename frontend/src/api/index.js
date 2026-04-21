@@ -102,7 +102,8 @@ const api = {
     updateAddress: (id, data) => request.put(`/api/users/addresses/${id}`, data),
     deleteAddress: (id) => request.delete(`/api/users/addresses/${id}`),
     getPointsLogs: (params) => request.get('/api/users/points', { params }),
-    getConsumptionStats: (params) => request.get('/api/users/consumption-stats', { params })
+    getConsumptionStats: (params) => request.get('/api/users/consumption-stats', { params }),
+    recharge: (data) => request.post('/api/users/recharge', data)
   },
 
   product: {

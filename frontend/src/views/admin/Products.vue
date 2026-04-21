@@ -28,6 +28,12 @@
         <el-table-column prop="price" label="价格" width="100">
           <template #default="{ row }">¥{{ row.price }}</template>
         </el-table-column>
+        <el-table-column prop="vip_price" label="会员价" width="100">
+          <template #default="{ row }">
+            <span v-if="row.vip_price !== null && row.vip_price !== undefined">¥{{ row.vip_price }}</span>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="stock" label="库存" width="80" />
         <el-table-column prop="sold_count" label="销量" width="80" />
         <el-table-column label="状态" width="80">
@@ -86,6 +92,10 @@
         <el-form-item label="价格">
           <el-input-number v-model="form.price" :min="0" :precision="2" />
         </el-form-item>
+        <el-form-item label="会员价">
+          <el-input-number v-model="form.vip_price" :min="0" :precision="2" />
+          <span class="form-tip">留空或设置为0表示不启用会员价</span>
+        </el-form-item>
         <el-form-item label="库存">
           <el-input-number v-model="form.stock" :min="0" />
         </el-form-item>
@@ -122,6 +132,7 @@ const currentId = ref(null)
 const form = ref({
   name: '',
   price: 0,
+  vip_price: null,
   stock: 0,
   brand: '',
   description: ''
@@ -150,7 +161,7 @@ const handleSearch = () => {
 const handleAdd = () => {
   isEdit.value = false
   currentId.value = null
-  form.value = { name: '', price: 0, stock: 0, brand: '', description: '' }
+  form.value = { name: '', price: 0, vip_price: null, stock: 0, brand: '', description: '' }
   dialogVisible.value = true
 }
 
@@ -225,5 +236,11 @@ onMounted(loadProducts)
   margin-top: 20px;
   display: flex;
   justify-content: flex-end;
+}
+
+.form-tip {
+  margin-left: 10px;
+  color: #909399;
+  font-size: 12px;
 }
 </style>

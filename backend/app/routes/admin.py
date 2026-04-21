@@ -72,14 +72,34 @@ def update_user_status(user_id):
 @admin_bp.route('/users/<int:user_id>/vip', methods=['PUT'])
 @admin_required
 def set_user_vip(user_id):
-    data = request.get_json()
+    data = request.get_json() or {}
     user = db.session.get(User, user_id)
     if not user:
         return error_response('用户不存在', 404)
-    user.is_vip = data.get('is_vip', 0)
-    user.vip_level = data.get('vip_level', 0)
-    if data.get('vip_months'):
-        user.vip_expire_time = datetime.utcnow() + timedelta(days=data['vip_months'] * 30)
+
+    try:
+        is_vip = int(data.get('is_vip', 0))
+        vip_level = int(data.get('vip_level', 0))
+        vip_months = int(data.get('vip_months', 0) or 0)
+    except (TypeError, ValueError):
+        return error_response('会员参数格式错误')
+
+    if is_vip not in (0, 1):
+        return error_response('会员状态无效')
+    if is_vip and vip_level not in (1, 2, 3):
+        return error_response('会员等级无效')
+    if not is_vip and vip_level != 0:
+        return error_response('取消会员时等级必须为0')
+    if is_vip and vip_months <= 0:
+        return error_response('会员有效期必须大于0个月')
+
+    user.is_vip = is_vip
+    user.vip_level = vip_level if is_vip else 0
+    user.vip_expire_time = (
+        datetime.utcnow() + timedelta(days=vip_months * 30)
+        if is_vip else None
+    )
+
     try:
         db.session.commit()
         return success_response(user.to_dict(), '设置成功')

@@ -11,6 +11,9 @@
         </el-descriptions-item>
         <el-descriptions-item label="创建时间">{{ formatDate(order.create_time) }}</el-descriptions-item>
         <el-descriptions-item label="实付金额">¥{{ order.payment_amount }}</el-descriptions-item>
+        <el-descriptions-item v-if="order.status === 0" label="当前余额">
+          ¥{{ formatMoney(userStore.user?.balance) }}
+        </el-descriptions-item>
         <el-descriptions-item label="运费">¥{{ order.freight_amount }}</el-descriptions-item>
         <el-descriptions-item label="优惠金额">¥{{ order.discount_amount }}</el-descriptions-item>
         <el-descriptions-item v-if="order.points_used" label="使用积分">{{ order.points_used }}</el-descriptions-item>
@@ -102,6 +105,7 @@ const addressDisplay = computed(() => {
 })
 
 const formatDate = (date) => dayjs(date).format('YYYY-MM-DD HH:mm:ss')
+const formatMoney = (value) => Number(value || 0).toFixed(2)
 
 const loadOrder = async () => {
   loading.value = true
@@ -115,10 +119,18 @@ const loadOrder = async () => {
 
 const handlePay = async () => {
   try {
+    await ElMessageBox.confirm(
+      `将使用账户余额支付 ¥${formatMoney(order.value.payment_amount)}，当前余额 ¥${formatMoney(userStore.user?.balance)}。确定支付吗？`,
+      '余额支付',
+      { type: 'warning' }
+    )
     await api.order.pay(String(order.value.order_id))
     ElMessage.success('支付成功')
+    await userStore.ensureSession(true)
     loadOrder()
-  } catch (error) { console.error('支付失败:', error) }
+  } catch (error) {
+    if (error !== 'cancel') console.error('支付失败:', error)
+  }
 }
 
 const handleCancel = async () => {

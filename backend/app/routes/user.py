@@ -2,6 +2,7 @@
 用户路由
 """
 from decimal import Decimal, InvalidOperation
+from datetime import datetime
 
 from flask import Blueprint, request, g, current_app
 from flasgger import swag_from
@@ -64,7 +65,7 @@ def update_profile():
     if not user:
         return error_response('用户不存在', 404)
     
-    data = request.get_json()
+    data = request.get_json() or {}
     
     # 更新字段
     if 'username' in data:
@@ -74,9 +75,22 @@ def update_profile():
                 return error_response('用户名已存在')
             user.username = username
     
-    for field in ['avatar', 'gender', 'birthday']:
-        if field in data:
-            setattr(user, field, data[field])
+    if 'avatar' in data:
+        user.avatar = data['avatar']
+    if 'gender' in data:
+        try:
+            user.gender = int(data['gender'])
+        except (TypeError, ValueError):
+            return error_response('性别参数格式错误')
+    if 'birthday' in data:
+        birthday = data['birthday']
+        if birthday:
+            try:
+                user.birthday = datetime.strptime(birthday[:10], '%Y-%m-%d').date()
+            except (TypeError, ValueError):
+                return error_response('生日格式错误')
+        else:
+            user.birthday = None
     
     try:
         db.session.commit()
@@ -105,7 +119,7 @@ def get_addresses():
 @token_required
 def recharge():
     """账户充值 (模拟)"""
-    data = request.get_json()
+    data = request.get_json() or {}
     amount = data.get('amount')
 
     try:

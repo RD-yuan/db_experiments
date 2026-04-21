@@ -23,16 +23,21 @@
         <div class="price-section">
           <div class="price-row">
             <span class="label">价格</span>
-            <span class="current-price">¥{{ product.price }}</span>
-            <span class="original-price" v-if="product.original_price && product.original_price > product.price">
+            <span class="current-price">¥{{ displayPrice }}</span>
+            <span class="original-price" v-if="hasActiveVip && hasVipPrice">
+              ¥{{ product.price }}
+            </span>
+            <span class="original-price" v-else-if="product.original_price && product.original_price > product.price">
               ¥{{ product.original_price }}
             </span>
           </div>
           
-          <div class="vip-price-row" v-if="product.vip_price && product.vip_price < product.price">
-            <span class="label">VIP价</span>
+          <div class="vip-price-row" v-if="hasVipPrice">
+            <span class="label">{{ hasActiveVip ? '会员价' : 'VIP价' }}</span>
             <span class="vip-price">¥{{ product.vip_price }}</span>
-            <el-tag type="danger" size="small" style="margin-left: 10px">VIP专享</el-tag>
+            <el-tag :type="hasActiveVip ? 'success' : 'danger'" size="small" style="margin-left: 10px">
+              {{ hasActiveVip ? '已生效' : '会员专享' }}
+            </el-tag>
           </div>
         </div>
         
@@ -150,11 +155,13 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { api } from '@/api'
+import { useUserStore } from '@/stores/user'
 import { getToken } from '@/utils/auth'
 import dayjs from 'dayjs'
 
 const route = useRoute()
 const router = useRouter()
+const userStore = useUserStore()
 
 const loading = ref(false)
 const product = ref({})
@@ -183,6 +190,26 @@ const subImages = computed(() => {
   }
 })
 
+const hasActiveVip = computed(() => {
+  const user = userStore.user
+  if (!user?.vip_active) return false
+  if (!user.vip_expire_time) return true
+  return new Date(user.vip_expire_time).getTime() > Date.now()
+})
+
+const hasVipPrice = computed(() => {
+  const vipPrice = Number(product.value.vip_price || 0)
+  const price = Number(product.value.price || 0)
+  return vipPrice > 0 && vipPrice < price
+})
+
+const displayPrice = computed(() => {
+  if (hasActiveVip.value && hasVipPrice.value) {
+    return product.value.vip_price
+  }
+  return product.value.price
+})
+
 const loadProduct = async () => {
   loading.value = true
   try {
@@ -193,6 +220,12 @@ const loadProduct = async () => {
     router.back()
   } finally {
     loading.value = false
+  }
+}
+
+const hydrateUser = async () => {
+  if (getToken() && !userStore.hasUser) {
+    await userStore.ensureSession()
   }
 }
 
@@ -249,6 +282,7 @@ const formatDate = (date) => {
 }
 
 onMounted(() => {
+  hydrateUser()
   loadProduct()
   loadReviews()
 })

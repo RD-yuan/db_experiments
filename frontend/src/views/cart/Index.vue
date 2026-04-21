@@ -21,8 +21,13 @@
             <div class="product-info">
               <h3 @click="goToProduct(item.product.product_id)">{{ item.product.name }}</h3>
               <div class="product-price">
-                <span class="current">¥{{ item.product.price }}</span>
-                <span class="vip" v-if="item.product.vip_price">VIP: ¥{{ item.product.vip_price }}</span>
+                <span class="current">¥{{ getEffectivePrice(item.product).toFixed(2) }}</span>
+                <span class="original" v-if="hasActiveVip && hasProductVipPrice(item.product)">
+                  ¥{{ Number(item.product.price || 0).toFixed(2) }}
+                </span>
+                <span class="vip" v-if="hasProductVipPrice(item.product)">
+                  {{ hasActiveVip ? '会员价已生效' : `VIP: ¥${Number(item.product.vip_price).toFixed(2)}` }}
+                </span>
               </div>
             </div>
             
@@ -36,7 +41,7 @@
             </div>
             
             <div class="subtotal">
-              ¥{{ (item.product.price * item.quantity).toFixed(2) }}
+              ¥{{ (getEffectivePrice(item.product) * item.quantity).toFixed(2) }}
             </div>
             
             <div class="actions">
@@ -79,10 +84,32 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '@/api'
+import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
+const userStore = useUserStore()
 const loading = ref(false)
 const cartItems = ref([])
+
+const hasActiveVip = computed(() => {
+  const user = userStore.user
+  if (!user?.vip_active) return false
+  if (!user.vip_expire_time) return true
+  return new Date(user.vip_expire_time).getTime() > Date.now()
+})
+
+const hasProductVipPrice = (product) => {
+  const vipPrice = Number(product?.vip_price || 0)
+  const price = Number(product?.price || 0)
+  return vipPrice > 0 && vipPrice < price
+}
+
+const getEffectivePrice = (product) => {
+  if (hasActiveVip.value && hasProductVipPrice(product)) {
+    return Number(product.vip_price)
+  }
+  return Number(product?.price || 0)
+}
 
 const selectedCount = computed(() => {
   return cartItems.value.filter(item => item.selected).reduce((sum, item) => sum + item.quantity, 0)
@@ -90,7 +117,7 @@ const selectedCount = computed(() => {
 
 const selectedAmount = computed(() => {
   return cartItems.value.filter(item => item.selected).reduce((sum, item) => {
-    return sum + item.product.price * item.quantity
+    return sum + getEffectivePrice(item.product) * item.quantity
   }, 0)
 })
 
@@ -225,6 +252,13 @@ onMounted(() => {
         font-size: 18px;
         color: #ff6700;
         font-weight: bold;
+      }
+
+      .original {
+        margin-left: 8px;
+        font-size: 13px;
+        color: #999;
+        text-decoration: line-through;
       }
       
       .vip {
