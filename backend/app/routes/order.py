@@ -10,6 +10,7 @@ from app.utils.helpers import (
     paginate, generate_order_id
 )
 import json
+from decimal import Decimal
 from datetime import datetime
 
 order_bp = Blueprint('order', __name__)
@@ -54,17 +55,16 @@ def get_orders():
     return success_response(result)
 
 
-@order_bp.route('/<string:order_id>', methods=['GET'])
+@order_bp.route('/<int:order_id>', methods=['GET'])
 @token_required
 def get_order(order_id):
     """获取订单详情"""
-    from app.models.models import User
     user = db.session.get(User, g.current_user_id)
     
     if user and user.is_admin:
-        order = Order.query.filter_by(order_id=int(order_id)).first()
+        order = Order.query.filter_by(order_id=order_id).first()
     else:
-        order = Order.query.filter_by(order_id=int(order_id), user_id=g.current_user_id).first()
+        order = Order.query.filter_by(order_id=order_id, user_id=g.current_user_id).first()
 
     if not order:
         return error_response('订单不存在', 404)
@@ -222,11 +222,11 @@ def create_order():
         return error_response(f'创建失败: {str(e)}')
 
 
-@order_bp.route('/<string:order_id>/cancel', methods=['POST'])
+@order_bp.route('/<int:order_id>/cancel', methods=['POST'])
 @token_required
 def cancel_order(order_id):
     """取消订单"""
-    order = Order.query.filter_by(order_id=int(order_id), user_id=g.current_user_id).first()
+    order = Order.query.filter_by(order_id=order_id, user_id=g.current_user_id).first()
 
     if not order:
         return error_response('订单不存在', 404)
@@ -264,11 +264,11 @@ def cancel_order(order_id):
         return error_response(f'操作失败: {str(e)}')
 
 
-@order_bp.route('/<string:order_id>/pay', methods=['POST'])
+@order_bp.route('/<int:order_id>/pay', methods=['POST'])
 @token_required
 def pay_order(order_id):
     """支付订单（模拟）"""
-    order = Order.query.filter_by(order_id=int(order_id), user_id=g.current_user_id).first()
+    order = Order.query.filter_by(order_id=order_id, user_id=g.current_user_id).first()
 
     if not order:
         return error_response('订单不存在', 404)
@@ -277,11 +277,12 @@ def pay_order(order_id):
         return error_response('订单状态不正确')
 
     user = order.user
-    if user.balance < order.payment_amount:
+    user_balance = user.balance or Decimal('0.00')
+    if user_balance < order.payment_amount:
         return error_response('账户余额不足，请先充值')
 
     try:
-        user.balance -= order.payment_amount
+        user.balance = user_balance - order.payment_amount
 
         for item in order.items:
             product = item.product
@@ -318,13 +319,11 @@ def pay_order(order_id):
         return error_response(f'支付失败: {str(e)}')
 
 
-@order_bp.route('/<string:order_id>/receive', methods=['POST'])
+@order_bp.route('/<int:order_id>/receive', methods=['POST'])
 @token_required
 def receive_order(order_id):
     """确认收货（仅限订单所属用户）"""
-    from app.models.models import User
-    user = db.session.get(User, g.current_user_id)
-    order = Order.query.filter_by(order_id=int(order_id)).first()
+    order = Order.query.filter_by(order_id=order_id).first()
 
     if not order:
         return error_response('订单不存在', 404)

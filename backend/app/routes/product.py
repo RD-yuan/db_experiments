@@ -1,13 +1,13 @@
 """
 商品路由
 """
-from flask import Blueprint, request, g
+from flask import Blueprint, request
 from flasgger import swag_from
 from app import db
-from app.models.models import Product, Category, User, OrderItem, ShoppingCart, Review
+from app.models.models import Product, Category, OrderItem, ShoppingCart, Review
 from app.utils.helpers import (
     success_response, error_response, paginate,
-    token_required, admin_required
+    admin_required
 )
 
 product_bp = Blueprint('product', __name__)
@@ -42,17 +42,7 @@ def get_products():
     sort = request.args.get('sort', '')
     order = request.args.get('order', 'desc')
     
-    # 判断当前用户是否为管理员
-    user = None
-    if hasattr(g, 'current_user_id'):
-        from app.models.models import User
-        user = db.session.get(User, g.current_user_id)
-    
-    # 管理员可查看所有商品（含下架），普通用户仅看上架商品
-    if user and user.is_admin:
-        query = Product.query
-    else:
-        query = Product.query.filter(Product.status == 1)
+    query = Product.query.filter(Product.status == 1)
     
     # 分类筛选
     if category_id:
@@ -105,11 +95,7 @@ def get_product(product_id):
     if not product:
         return error_response('商品不存在', 404)
 
-    # 如果不是管理员且商品已下架，则返回404
-    user = None
-    if hasattr(g, 'current_user_id'):
-        user = db.session.get(User, g.current_user_id)
-    if not (user and user.is_admin) and product.status != 1:
+    if product.status != 1:
         return error_response('商品不存在或已下架', 404)
 
     data = product.to_dict()

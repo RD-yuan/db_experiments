@@ -132,7 +132,7 @@ const dialogTitle = computed(() => isEdit.value ? '编辑商品' : '添加商品
 const loadProducts = async () => {
   loading.value = true
   try {
-    const res = await api.product.getList({ page: page.value, per_page: perPage.value, keyword: keyword.value })
+    const res = await api.admin.getProducts({ page: page.value, per_page: perPage.value, keyword: keyword.value })
     tableData.value = res.items || []
     total.value = res.total || 0
   } catch (error) {

@@ -29,15 +29,18 @@ CREATE TABLE t_user (
     vip_level TINYINT DEFAULT 0 COMMENT 'VIP等级: 0-普通 1-银卡 2-金卡 3-钻石',
     vip_expire_time DATETIME DEFAULT NULL COMMENT 'VIP到期时间',
     points INT DEFAULT 0 COMMENT '积分余额',
+    balance DECIMAL(10,2) NOT NULL DEFAULT 0.00 COMMENT '账户余额',
     status TINYINT DEFAULT 1 COMMENT '状态: 0-禁用 1-正常',
     last_login_time DATETIME DEFAULT NULL COMMENT '最后登录时间',
     last_login_ip VARCHAR(50) DEFAULT NULL COMMENT '最后登录IP',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    is_admin TINYINT DEFAULT 0 COMMENT '是否管理员: 0-否 1-是',
     
     INDEX idx_phone (phone),
     INDEX idx_email (email),
     INDEX idx_status (status),
+    INDEX idx_is_admin (is_admin),
     INDEX idx_create_time (create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户表';
 

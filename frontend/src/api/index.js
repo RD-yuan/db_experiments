@@ -157,6 +157,7 @@ const api = {
     getStatsOverview: () => request.get('/api/admin/stats/overview'),
     getHotProducts: (limit) => request.get('/api/admin/stats/hot-products', { params: { limit } }),
     getSalesTrend: (days) => request.get('/api/admin/stats/sales-trend', { params: { days } }),
+    getProducts: (params) => request.get('/api/admin/products', { params }),
     createProduct: (data) => request.post('/api/products', data),
     updateProduct: (id, data) => request.put(`/api/products/${id}`, data),
     deleteProduct: (id) => request.delete(`/api/products/${id}`),

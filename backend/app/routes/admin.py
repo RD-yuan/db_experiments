@@ -4,11 +4,12 @@
 from flask import Blueprint, request, g, current_app
 from flasgger import swag_from
 from app import db
-from app.models.models import User, Product, Order, OperationLog, OrderItem, PointsLog, ShoppingCart, Review
+from app.models.models import User, Product, Category, Order, OperationLog, OrderItem, PointsLog, ShoppingCart, Review
 from app.utils.helpers import (
     success_response, error_response, admin_required, paginate
 )
 from sqlalchemy import func
+from decimal import Decimal
 from datetime import datetime, timedelta
 
 admin_bp = Blueprint('admin', __name__)
@@ -191,6 +192,51 @@ def get_sales_trend():
 
 # ============ 商品管理 ============
 
+@admin_bp.route('/products', methods=['GET'])
+@admin_required
+def get_admin_products():
+    """管理员商品列表（包含下架商品）"""
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    category_id = request.args.get('category_id', type=int)
+    keyword = request.args.get('keyword', '').strip()
+    min_price = request.args.get('min_price', type=float)
+    max_price = request.args.get('max_price', type=float)
+    status = request.args.get('status', type=int)
+    sort = request.args.get('sort', '')
+    order = request.args.get('order', 'desc')
+
+    query = Product.query
+
+    if status is not None:
+        query = query.filter(Product.status == status)
+
+    if category_id:
+        category_ids = [category_id]
+        children = Category.query.filter_by(parent_id=category_id).all()
+        category_ids.extend([c.category_id for c in children])
+        query = query.filter(Product.category_id.in_(category_ids))
+
+    if keyword:
+        query = query.filter(Product.name.like(f'%{keyword}%'))
+
+    if min_price is not None:
+        query = query.filter(Product.price >= min_price)
+    if max_price is not None:
+        query = query.filter(Product.price <= max_price)
+
+    if sort == 'price':
+        query = query.order_by(Product.price.asc() if order == 'asc' else Product.price.desc())
+    elif sort == 'sold':
+        query = query.order_by(Product.sold_count.asc() if order == 'asc' else Product.sold_count.desc())
+    elif sort == 'new':
+        query = query.order_by(Product.create_time.asc() if order == 'asc' else Product.create_time.desc())
+    else:
+        query = query.order_by(Product.create_time.desc())
+
+    return success_response(paginate(query, page, per_page))
+
+
 @admin_bp.route('/products/<int:product_id>/off-shelf', methods=['PUT'])
 @admin_required
 def off_shelf_product(product_id):
@@ -211,10 +257,12 @@ def off_shelf_product(product_id):
         ).distinct().all()
 
         for order in affected_orders:
+            order_items = OrderItem.query.filter_by(order_id=order.order_id).all()
+
             if order.status == 1:  # 已支付订单退款
                 user = order.user
-                refund_amount = float(order.payment_amount)
-                user.balance += refund_amount
+                refund_amount = order.payment_amount or Decimal('0.00')
+                user.balance = (user.balance or Decimal('0.00')) + refund_amount
 
                 if order.points_used > 0:
                     user.points += order.points_used
@@ -229,16 +277,17 @@ def off_shelf_product(product_id):
                     )
                     db.session.add(points_log)
 
-                # 恢复库存（仅恢复该商品数量）
-                order_items = OrderItem.query.filter_by(order_id=order.order_id, product_id=product_id).all()
                 for item in order_items:
-                    product.stock += item.quantity
-                    product.sold_count -= item.quantity
+                    item_product = item.product
+                    if item_product:
+                        item_product.stock = (item_product.stock or 0) + item.quantity
+                        item_product.sold_count = max(0, (item_product.sold_count or 0) - item.quantity)
 
             else:  # 待支付订单释放锁定库存
-                order_items = OrderItem.query.filter_by(order_id=order.order_id, product_id=product_id).all()
                 for item in order_items:
-                    product.locked_stock = max(0, (product.locked_stock or 0) - item.quantity)
+                    item_product = item.product
+                    if item_product:
+                        item_product.locked_stock = max(0, (item_product.locked_stock or 0) - item.quantity)
 
             order.status = 4  # 已取消
             order.update_time = datetime.utcnow()

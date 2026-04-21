@@ -9,8 +9,8 @@ USE ecommerce_db;
 -- 1. 插入管理员账户
 -- 密码: admin123 (BCrypt加密后的值)
 -- ============================================================
-INSERT INTO t_user (username, password, phone, email, gender, status, is_vip) VALUES
-('admin', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.aOy6.uRKrJXEku', '13800000000', 'admin@example.com', 1, 1, 0);
+INSERT INTO t_user (username, password, phone, email, gender, status, is_vip, is_admin) VALUES
+('admin', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.aOy6.uRKrJXEku', '13800000000', 'admin@example.com', 1, 1, 0, 1);
 
 -- ============================================================
 -- 2. 插入测试用户

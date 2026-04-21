@@ -1,6 +1,8 @@
 """
 用户路由
 """
+from decimal import Decimal, InvalidOperation
+
 from flask import Blueprint, request, g, current_app
 from flasgger import swag_from
 from app import db
@@ -105,19 +107,21 @@ def recharge():
     """账户充值 (模拟)"""
     data = request.get_json()
     amount = data.get('amount')
-    
-    if not amount or float(amount) <= 0:
+
+    try:
+        recharge_amount = Decimal(str(amount)).quantize(Decimal('0.01'))
+    except (InvalidOperation, TypeError, ValueError):
         return error_response('请输入正确的充值金额')
-    
+
+    if recharge_amount <= 0:
+        return error_response('请输入正确的充值金额')
+
     user = db.session.get(User, g.current_user_id)
     if not user:
         return error_response('用户不存在', 404)
-        
+
     try:
-        # 增加余额
-        user.balance = (user.balance or 0) + db.Numeric(float(amount))
-        # (可选) 记录一条资金流水日志，建议后续增加 t_balance_log 表
-        
+        user.balance = (user.balance or Decimal('0.00')) + recharge_amount
         db.session.commit()
         return success_response({'new_balance': float(user.balance)}, '充值成功')
     except Exception as e:
