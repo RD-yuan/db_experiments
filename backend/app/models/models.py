@@ -21,6 +21,7 @@ class User(db.Model):
     vip_level = db.Column(db.SmallInteger, default=0)
     vip_expire_time = db.Column(db.DateTime)
     points = db.Column(db.Integer, default=0)
+    balance = db.Column(db.Numeric(10, 2), default=0.00)
     status = db.Column(db.SmallInteger, default=1)  # 0-禁用 1-正常
     last_login_time = db.Column(db.DateTime)
     last_login_ip = db.Column(db.String(50))
@@ -46,6 +47,7 @@ class User(db.Model):
             'is_vip': self.is_vip,
             'vip_level': self.vip_level,
             'points': self.points,
+            'balance': float(self.balance) if self.balance else 0, # 新增返回余额
             'status': self.status,
             'create_time': self.create_time.isoformat() if self.create_time else None
         }
@@ -92,8 +94,8 @@ class Product(db.Model):
     original_price = db.Column(db.Numeric(10, 2))
     vip_price = db.Column(db.Numeric(10, 2))
     stock = db.Column(db.Integer, nullable=False, default=0)
-    locked_stock = db.Column(db.Integer, default=0)
-    sold_count = db.Column(db.Integer, default=0)
+    locked_stock = db.Column(db.Integer, nullable=False, default=0, server_default='0')
+    sold_count = db.Column(db.Integer, nullable=False, default=0, server_default='0')
     category_id = db.Column(db.Integer, db.ForeignKey('t_category.category_id'))
     brand = db.Column(db.String(100))
     main_image = db.Column(db.String(255))

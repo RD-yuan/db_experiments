@@ -97,6 +97,33 @@ def get_addresses():
     return success_response([addr.to_dict() for addr in addresses])
 
 
+# user.py
+
+@user_bp.route('/recharge', methods=['POST'])
+@token_required
+def recharge():
+    """账户充值 (模拟)"""
+    data = request.get_json()
+    amount = data.get('amount')
+    
+    if not amount or float(amount) <= 0:
+        return error_response('请输入正确的充值金额')
+    
+    user = db.session.get(User, g.current_user_id)
+    if not user:
+        return error_response('用户不存在', 404)
+        
+    try:
+        # 增加余额
+        user.balance = (user.balance or 0) + db.Numeric(float(amount))
+        # (可选) 记录一条资金流水日志，建议后续增加 t_balance_log 表
+        
+        db.session.commit()
+        return success_response({'new_balance': float(user.balance)}, '充值成功')
+    except Exception as e:
+        db.session.rollback()
+        return error_response(f'充值失败: {str(e)}')
+
 @user_bp.route('/addresses', methods=['POST'])
 @token_required
 def add_address():

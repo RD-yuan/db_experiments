@@ -10,6 +10,7 @@ from app.utils.helpers import (
     paginate, generate_order_id
 )
 import json
+from datetime import datetime
 
 order_bp = Blueprint('order', __name__)
 
@@ -199,6 +200,8 @@ def create_order():
             db.session.add(order_item)
 
             # 锁定库存
+            if item_data['product'].locked_stock is None:
+                item_data['product'].locked_stock = 0
             item_data['product'].locked_stock += item_data['quantity']
 
         # 删除购物车
@@ -278,7 +281,7 @@ def cancel_order(order_id):
 @order_bp.route('/<int:order_id>/pay', methods=['POST'])
 @token_required
 def pay_order(order_id):
-    """支付订单（模拟）"""
+    """支付订单（包含余额检查与扣款）"""
     order = Order.query.filter_by(order_id=order_id, user_id=g.current_user_id).first()
 
     if not order:
@@ -287,24 +290,36 @@ def pay_order(order_id):
     if order.status != 0:
         return error_response('订单状态不正确')
 
-    try:
-        from datetime import datetime
+    # 获取用户信息
+    user = order.user
 
-        # 扣减库存
+    # 核心修复：余额校验
+    # 假设 payment_method = 3 是“余额支付”
+    
+    if user.balance < order.payment_amount:
+        return error_response('账户余额不足，请先充值')
+
+    try:
+        # 1. 执行扣款 (仅当使用余额支付时)
+        
+        user.balance -= order.payment_amount
+
+        # 2. 扣减库存 (原逻辑)
         for item in order.items:
             product = item.product
             if product:
+                if product.stock < item.quantity:
+                    raise Exception(f'商品 {product.name} 库存不足')
                 product.stock -= item.quantity
                 product.locked_stock -= item.quantity
                 product.sold_count += item.quantity
 
+        # 3. 更新订单状态
         order.status = 1  # 已支付
-        order.payment_method = 1  # 模拟微信支付
         order.payment_time = datetime.utcnow()
-        order.transaction_id = f"MOCK_{order_id}"
+        order.transaction_id = f"PAY_{order_id}"
 
-        # 赠送积分（1元1积分）
-        user = order.user
+        # 4. 赠送积分 (原逻辑)
         earned_points = int(float(order.payment_amount))
         user.points += earned_points
 
