@@ -156,8 +156,12 @@ const openReviewDialog = async (item, isEdit = false) => {
   if (isEdit) {
     try {
       const res = await api.review.getMy({ page: 1, per_page: 100 })
+      console.log('getMy 返回:', res)
       const reviewList = res.items || []
-      const existing = reviewList.find(r => r.order_item_id === item.order_item_id)
+      console.log('评价列表:', reviewList)
+      console.log('当前订单项ID:', item.order_item_id, typeof item.order_item_id)
+      const existing = reviewList.find(r => Number(r.order_item_id) === Number(item.order_item_id))
+      console.log('匹配结果:', existing)
       if (existing) {
         currentReviewId.value = existing.review_id
         reviewForm.value = {
@@ -216,7 +220,8 @@ const handleDeleteReview = async (item) => {
     await ElMessageBox.confirm('确定要删除该评价吗？', '提示')
     const res = await api.review.getMy({ page: 1, per_page: 100 })
     const reviewList = res.items || []
-    const target = reviewList.find(r => r.order_item_id === item.order_item_id)
+    const target = reviewList.find(r => Number(r.order_item_id) === Number(item.order_item_id))
+    console.log('删除目标:', target)
     if (!target) {
       ElMessage.error('未找到评价记录')
       return

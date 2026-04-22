@@ -34,6 +34,11 @@
             <span v-else>-</span>
           </template>
         </el-table-column>
+        <el-table-column prop="exchange_points" label="兑换积分" width="100">
+          <template #default="{ row }">
+            {{ row.exchange_points || 0 }}
+          </template>
+        </el-table-column>
         <el-table-column prop="stock" label="库存" width="80" />
         <el-table-column prop="sold_count" label="销量" width="80" />
         <el-table-column label="状态" width="80">
@@ -99,6 +104,17 @@
         <el-form-item label="库存">
           <el-input-number v-model="form.stock" :min="0" />
         </el-form-item>
+        <!-- 兑换积分字段已正确放置在对话框表单内 -->
+        <el-form-item label="兑换积分">
+          <el-input-number
+            v-model="form.exchange_points"
+            :min="0"
+            :step="100"
+            controls-position="right"
+            style="width: 200px"
+          />
+          <span class="form-tip">0 表示不可用积分兑换</span>
+        </el-form-item>
         <el-form-item label="品牌">
           <el-input v-model="form.brand" />
         </el-form-item>
@@ -134,6 +150,7 @@ const form = ref({
   price: 0,
   vip_price: null,
   stock: 0,
+  exchange_points: 0,
   brand: '',
   description: ''
 })
@@ -161,14 +178,30 @@ const handleSearch = () => {
 const handleAdd = () => {
   isEdit.value = false
   currentId.value = null
-  form.value = { name: '', price: 0, vip_price: null, stock: 0, brand: '', description: '' }
+  form.value = {
+    name: '',
+    price: 0,
+    vip_price: null,
+    stock: 0,
+    exchange_points: 0,
+    brand: '',
+    description: ''
+  }
   dialogVisible.value = true
 }
 
 const handleEdit = (row) => {
   isEdit.value = true
   currentId.value = row.product_id
-  form.value = { ...row }
+  form.value = {
+    name: row.name || '',
+    price: row.price || 0,
+    vip_price: row.vip_price !== null ? row.vip_price : null,
+    stock: row.stock || 0,
+    exchange_points: row.exchange_points || 0,
+    brand: row.brand || '',
+    description: row.description || ''
+  }
   dialogVisible.value = true
 }
 
@@ -213,6 +246,7 @@ const handleDelete = async (row) => {
 }
 
 const submitForm = async () => {
+  console.log('提交的表单数据:', form.value)
   try {
     if (isEdit.value) {
       await api.admin.updateProduct(currentId.value, form.value)

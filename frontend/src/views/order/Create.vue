@@ -40,6 +40,25 @@
         </div>
       </div>
 
+      <!-- 积分使用 -->
+      <div class="section points-section">
+        <div class="points-info">
+          <span>我的积分：<strong>{{ userPoints }}</strong> (可抵扣 ¥{{ maxPointsDiscount.toFixed(2) }})</span>
+        </div>
+        <div class="points-use">
+          <span>使用积分：</span>
+          <el-input-number
+            v-model="pointsToUse"
+            :min="0"
+            :max="maxUsablePoints"
+            :step="100"
+            controls-position="right"
+            style="width: 180px"
+          />
+          <span class="points-tip">100积分=1元</span>
+        </div>
+      </div>
+
       <!-- 金额汇总 -->
       <div class="section summary">
         <div class="summary-row">
@@ -84,7 +103,13 @@ export default {
     const addresses = ref([])
     const selectedAddressId = ref(null)
     const orderItems = ref([])
+    const pointsToUse = ref(0)
 
+    const userPoints = computed(() => userStore.user?.points || 0)
+    const maxPointsDiscount = computed(() => {
+      return Math.min(userPoints.value * 0.01, totalAmount.value * 0.5)
+    })
+    const maxUsablePoints = computed(() => Math.floor(maxPointsDiscount.value * 100))
     const hasActiveVip = computed(() => {
       const user = userStore.user
       if (!user?.vip_active) return false
@@ -163,7 +188,8 @@ export default {
         loading.value = true
         const data = await api.order.create({
           address_id: selectedAddressId.value,
-          cart_ids: cartIds
+          cart_ids: cartIds,
+          points_used: pointsToUse.value
         })
         ElMessage.success('订单创建成功')
         // 跳转到订单详情或支付页，根据后端返回的 order_id
@@ -191,7 +217,11 @@ export default {
       getEffectivePrice,
       totalAmount,
       freight,
-      submitOrder
+      submitOrder,
+      pointsToUse,
+      userPoints,
+      maxPointsDiscount,
+      maxUsablePoints
     }
   }
 }
@@ -275,5 +305,18 @@ export default {
   display: flex;
   justify-content: flex-end;
   gap: 20px;
+}
+
+.points-section {
+  background: #f9f9f9;
+  padding: 15px 20px;
+  border-radius: 8px;
+  .points-info { margin-bottom: 10px; }
+  .points-use {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    .points-tip { color: #999; font-size: 13px; }
+  }
 }
 </style>

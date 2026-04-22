@@ -15,10 +15,10 @@
               <el-input v-model="profileForm.username" placeholder="请输入用户名" />
             </el-form-item>
             <el-form-item label="邮箱">
-              <el-input :model-value="profile.email || '-'" disabled />
+              <el-input v-model="profileForm.email" placeholder="请输入邮箱" />
             </el-form-item>
             <el-form-item label="手机号">
-              <el-input :model-value="profile.phone || '-'" disabled />
+              <el-input v-model="profileForm.phone" placeholder="请输入手机号" />
             </el-form-item>
             <el-form-item label="性别">
               <el-select v-model="profileForm.gender" placeholder="请选择性别">
@@ -44,7 +44,10 @@
           <template #header>
             <div class="card-header">
               <span>账户资产</span>
-              <el-button type="success" @click="rechargeDialogVisible = true">余额充值</el-button>
+              <div class="asset-actions">
+                <el-button type="warning" @click="openVipDialog">开通VIP</el-button>
+                <el-button type="success" @click="rechargeDialogVisible = true">余额充值</el-button>
+              </div>
             </div>
           </template>
 
@@ -74,6 +77,7 @@
       </el-col>
     </el-row>
 
+    <!-- 余额充值对话框 -->
     <el-dialog v-model="rechargeDialogVisible" title="余额充值" width="420px">
       <el-form :model="rechargeForm" label-width="80px">
         <el-form-item label="充值金额">
@@ -92,12 +96,35 @@
         <el-button type="primary" :loading="recharging" @click="submitRecharge">确认充值</el-button>
       </template>
     </el-dialog>
+
+    <!-- VIP套餐对话框 -->
+    <el-dialog v-model="vipDialogVisible" title="选择VIP套餐" width="500px">
+      <el-radio-group v-model="selectedPackage" class="vip-package-list">
+        <el-radio
+          v-for="(pkg, index) in vipPackages"
+          :key="index"
+          :label="index"
+          border
+          class="vip-package-item"
+        >
+          <div class="package-info">
+            <span class="package-name">{{ pkg.name }} {{ pkg.months }}个月</span>
+            <span class="package-price">¥{{ pkg.price.toFixed(2) }}</span>
+          </div>
+        </el-radio>
+      </el-radio-group>
+      <div class="balance-tip">当前余额：¥{{ formatMoney(profile.balance) }}</div>
+      <template #footer>
+        <el-button @click="vipDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="purchasing" @click="purchaseVip">确认购买</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '@/api'
 import { useUserStore } from '@/stores/user'
 
@@ -110,6 +137,8 @@ const profile = ref({})
 
 const profileForm = reactive({
   username: '',
+  email: '',
+  phone: '',
   gender: 0,
   birthday: ''
 })
@@ -117,6 +146,12 @@ const profileForm = reactive({
 const rechargeForm = reactive({
   amount: 100
 })
+
+// VIP相关
+const vipDialogVisible = ref(false)
+const purchasing = ref(false)
+const vipPackages = ref([])
+const selectedPackage = ref(null)
 
 const vipActive = computed(() => {
   if (!profile.value?.vip_active) return false
@@ -135,6 +170,8 @@ const formatMoney = (value) => Number(value || 0).toFixed(2)
 const syncForm = (data) => {
   profile.value = data || {}
   profileForm.username = profile.value.username || ''
+  profileForm.email = profile.value.email || ''
+  profileForm.phone = profile.value.phone || ''
   profileForm.gender = profile.value.gender ?? 0
   profileForm.birthday = profile.value.birthday || ''
   userStore.setUser(profile.value)
@@ -155,6 +192,8 @@ const saveProfile = async () => {
   try {
     const res = await api.user.updateProfile({
       username: profileForm.username,
+      email: profileForm.email || null,
+      phone: profileForm.phone || null,
       gender: profileForm.gender,
       birthday: profileForm.birthday || null
     })
@@ -183,6 +222,45 @@ const submitRecharge = async () => {
   }
 }
 
+const openVipDialog = async () => {
+  try {
+    const res = await api.user.getVipPackages()
+    vipPackages.value = res || []
+    selectedPackage.value = null
+    vipDialogVisible.value = true
+  } catch (error) {
+    ElMessage.error('获取套餐失败')
+  }
+}
+
+const purchaseVip = async () => {
+  if (selectedPackage.value === null) {
+    ElMessage.warning('请选择一个套餐')
+    return
+  }
+  const pkg = vipPackages.value[selectedPackage.value]
+  try {
+    await ElMessageBox.confirm(
+      `确定使用余额购买 ${pkg.name} ${pkg.months}个月，支付 ¥${pkg.price.toFixed(2)}？`,
+      '确认购买'
+    )
+  } catch {
+    return
+  }
+
+  purchasing.value = true
+  try {
+    const res = await api.user.purchaseVip({ package_index: selectedPackage.value })
+    syncForm(res)
+    vipDialogVisible.value = false
+    ElMessage.success('VIP开通成功！')
+  } catch (error) {
+    // 错误已由拦截器处理
+  } finally {
+    purchasing.value = false
+  }
+}
+
 onMounted(loadProfile)
 </script>
 
@@ -200,6 +278,11 @@ onMounted(loadProfile)
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.asset-actions {
+  display: flex;
+  gap: 10px;
 }
 
 .asset-list {
@@ -228,5 +311,38 @@ onMounted(loadProfile)
   font-size: 14px;
   font-weight: 400;
   color: #909399;
+}
+
+.vip-package-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.vip-package-item {
+  padding: 12px 16px !important;
+  height: auto !important;
+}
+
+.package-info {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.package-name {
+  font-weight: 500;
+}
+
+.package-price {
+  color: #ff6700;
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.balance-tip {
+  margin-top: 16px;
+  color: #606266;
 }
 </style>

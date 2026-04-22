@@ -32,7 +32,6 @@
           <div class="topbar-title">管理后台</div>
           <div class="topbar-actions">
             <span class="admin-name">{{ userStore.user?.username || '管理员' }}</span>
-            <el-button text @click="router.push('/home')">返回前台</el-button>
             <el-button type="danger" plain @click="handleLogout">退出登录</el-button>
           </div>
         </el-header>

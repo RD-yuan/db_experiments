@@ -2,7 +2,7 @@
 用户路由
 """
 from decimal import Decimal, InvalidOperation
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from flask import Blueprint, request, g, current_app
 from flasgger import swag_from
@@ -48,33 +48,53 @@ def get_profile():
             'type': 'object',
             'properties': {
                 'username': {'type': 'string'},
+                'email': {'type': 'string'},
+                'phone': {'type': 'string'},
                 'avatar': {'type': 'string'},
                 'gender': {'type': 'integer'},
                 'birthday': {'type': 'string'}
             }
         }
     }],
-    'responses': {
-        200: {'description': '更新成功'}
-    }
+    'responses': {200: {'description': '更新成功'}}
 })
 def update_profile():
     """更新用户信息"""
     user = db.session.get(User, g.current_user_id)
-    
     if not user:
         return error_response('用户不存在', 404)
-    
+
     data = request.get_json() or {}
-    
-    # 更新字段
+
+    # 更新用户名
     if 'username' in data:
         username = data['username'].strip()
         if username and username != user.username:
             if User.query.filter(User.username == username, User.user_id != user.user_id).first():
                 return error_response('用户名已存在')
             user.username = username
-    
+
+    # 更新邮箱
+    if 'email' in data:
+        email = data['email'].strip() if data['email'] else None
+        if email and email != user.email:
+            if User.query.filter(User.email == email, User.user_id != user.user_id).first():
+                return error_response('邮箱已被使用')
+            user.email = email
+        elif email == '':
+            user.email = None
+
+    # 更新手机号
+    if 'phone' in data:
+        phone = data['phone'].strip() if data['phone'] else None
+        if phone and phone != user.phone:
+            if User.query.filter(User.phone == phone, User.user_id != user.user_id).first():
+                return error_response('手机号已被使用')
+            user.phone = phone
+        elif phone == '':
+            user.phone = None
+
+    # 其他字段
     if 'avatar' in data:
         user.avatar = data['avatar']
     if 'gender' in data:
@@ -91,7 +111,7 @@ def update_profile():
                 return error_response('生日格式错误')
         else:
             user.birthday = None
-    
+
     try:
         db.session.commit()
         return success_response(user.to_dict(), '更新成功')
@@ -352,3 +372,66 @@ def get_consumption_stats():
         current_app.logger.error(f"消费统计查询失败: {str(e)}", exc_info=True)
         return error_response(f'统计查询失败，请稍后重试', 500)
 
+# ============ VIP 购买 ============
+
+@user_bp.route('/vip/packages', methods=['GET'])
+def get_vip_packages():
+    """获取VIP套餐列表"""
+    packages = current_app.config.get('VIP_PACKAGES', [])
+    return success_response(packages)
+
+
+@user_bp.route('/vip/purchase', methods=['POST'])
+@token_required
+def purchase_vip():
+    """购买VIP（余额支付）"""
+    from datetime import timedelta
+
+    user = db.session.get(User, g.current_user_id)
+    if not user:
+        return error_response('用户不存在', 404)
+
+    data = request.get_json() or {}
+    package_index = data.get('package_index')
+    if package_index is None:
+        return error_response('请选择套餐')
+
+    packages = current_app.config.get('VIP_PACKAGES', [])
+    try:
+        pkg = packages[int(package_index)]
+    except (IndexError, ValueError):
+        return error_response('套餐不存在')
+
+    price = Decimal(str(pkg['price']))
+    if user.balance < price:
+        return error_response('余额不足，请先充值')
+
+    months = pkg['months']
+    level = pkg['level']
+
+    try:
+        # 扣款
+        user.balance -= price
+
+        # 更新VIP信息
+        now = datetime.utcnow()
+        if user.is_vip and user.vip_expire_time and user.vip_expire_time > now:
+            # 已有有效VIP，叠加时长
+            user.vip_expire_time = user.vip_expire_time + timedelta(days=months * 30)
+        else:
+            # 新开通或已过期
+            user.is_vip = 1
+            user.vip_level = level
+            user.vip_expire_time = now + timedelta(days=months * 30)
+
+        # 可选：赠送积分（示例：每消费1元送10积分）
+        # earned_points = int(price * 10)
+        # user.points += earned_points
+        # points_log = PointsLog(...)
+        # db.session.add(points_log)
+
+        db.session.commit()
+        return success_response(user.to_dict(), 'VIP开通成功')
+    except Exception as e:
+        db.session.rollback()
+        return error_response(f'购买失败: {str(e)}')

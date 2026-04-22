@@ -40,6 +40,14 @@ class Config:
     DEFAULT_PAGE_SIZE = 20
     MAX_PAGE_SIZE = 100
 
+    VIP_PACKAGES = [
+        {'level': 1, 'name': '银卡会员', 'months': 1, 'price': 19.90},
+        {'level': 1, 'name': '银卡会员', 'months': 3, 'price': 49.90},
+        {'level': 2, 'name': '金卡会员', 'months': 1, 'price': 29.90},
+        {'level': 2, 'name': '金卡会员', 'months': 3, 'price': 79.90},
+        {'level': 3, 'name': '钻石会员', 'months': 1, 'price': 49.90},
+        {'level': 3, 'name': '钻石会员', 'months': 12, 'price': 499.90},
+    ]
 
 class DevelopmentConfig(Config):
     """Development configuration."""

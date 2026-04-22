@@ -152,6 +152,21 @@ def get_new_products():
     products = Product.query.filter(Product.status == 1, Product.is_new == 1).order_by(Product.create_time.desc()).limit(limit).all()
     return success_response([p.to_dict() for p in products])
 
+# ============ 积分兑换商品 ============
+
+@product_bp.route('/exchange', methods=['GET'])
+def get_exchange_products():
+    """获取积分兑换商品列表（仅上架且设置了兑换积分的商品）"""
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+
+    query = Product.query.filter(
+        Product.exchange_points > 0,
+        Product.status == 1
+    ).order_by(Product.create_time.desc())
+
+    result = paginate(query, page, per_page)
+    return success_response(result)
 
 # ============ 管理员接口 ============
 
@@ -205,7 +220,8 @@ def create_product():
         sub_images=data.get('sub_images'),
         is_hot=data.get('is_hot', 0),
         is_new=data.get('is_new', 0),
-        is_recommend=data.get('is_recommend', 0)
+        is_recommend=data.get('is_recommend', 0),
+        exchange_points=data.get('exchange_points', 0)
     )
     try:
         db.session.add(product)
@@ -235,7 +251,7 @@ def update_product(product_id):
     data = request.get_json()
     for field in ['name', 'description', 'price', 'original_price', 'vip_price',
                   'stock', 'category_id', 'brand', 'main_image', 'sub_images',
-                  'status', 'is_hot', 'is_new', 'is_recommend']:
+                  'status', 'is_hot', 'is_new', 'is_recommend', 'exchange_points']:
         if field in data:
             setattr(product, field, data[field])
     try:

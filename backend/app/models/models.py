@@ -129,6 +129,7 @@ class Product(db.Model):
     is_recommend = db.Column(db.SmallInteger, default=0)
     create_time = db.Column(db.DateTime, default=datetime.utcnow)
     update_time = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    exchange_points = db.Column(db.Integer, default=0)
     
     # 关联
     reviews = db.relationship('Review', backref='product', lazy='dynamic')
@@ -155,7 +156,8 @@ class Product(db.Model):
             'status': self.status if self.status is not None else 0,
             'is_hot': self.is_hot or 0,
             'is_new': self.is_new or 0,
-            'is_recommend': self.is_recommend or 0
+            'is_recommend': self.is_recommend or 0,
+            'exchange_points': self.exchange_points or 0 
         }
 
 
@@ -427,13 +429,15 @@ class Review(db.Model):
             'review_id': self.review_id,
             'user_id': self.user_id,
             'product_id': self.product_id,
+            'order_item_id': self.order_item_id,
             'rating': self.rating,
             'comment': self.comment,
             'images': self.images,
             'is_anonymous': self.is_anonymous,
             'status': self.status,
             'admin_reply': self.admin_reply,
-            'create_time': self.create_time.isoformat() if self.create_time else None
+            'create_time': self.create_time.isoformat() if self.create_time else None,
+            'username': self.user.username if self.user else '未知用户'
         }
 
 

@@ -103,14 +103,17 @@ const api = {
     deleteAddress: (id) => request.delete(`/api/users/addresses/${id}`),
     getPointsLogs: (params) => request.get('/api/users/points', { params }),
     getConsumptionStats: (params) => request.get('/api/users/consumption-stats', { params }),
-    recharge: (data) => request.post('/api/users/recharge', data)
+    recharge: (data) => request.post('/api/users/recharge', data),
+    getVipPackages: () => request.get('/api/users/vip/packages'),
+    purchaseVip: (data) => request.post('/api/users/vip/purchase', data)
   },
 
   product: {
     getList: (params) => request.get('/api/products', { params }),
     getDetail: (id) => request.get(`/api/products/${id}`),
     getHot: (limit = 10) => request.get('/api/products/hot', { params: { limit } }),
-    getNew: (limit = 10) => request.get('/api/products/new', { params: { limit } })
+    getNew: (limit = 10) => request.get('/api/products/new', { params: { limit } }),
+    getExchangeList: (params) => request.get('/api/products/exchange', { params })
   },
 
   category: {
@@ -132,7 +135,8 @@ const api = {
     create: (data) => request.post('/api/orders', data),
     pay: (id) => request.post(`/api/orders/${id}/pay`),
     cancel: (id) => request.post(`/api/orders/${id}/cancel`),
-    receive: (id) => request.post(`/api/orders/${id}/receive`)
+    receive: (id) => request.post(`/api/orders/${id}/receive`),
+    exchange: (data) => request.post('/api/orders/exchange', data)
   },
 
   coupon: {

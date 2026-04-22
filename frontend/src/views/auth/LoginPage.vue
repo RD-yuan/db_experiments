@@ -94,7 +94,13 @@ const handleLogin = () => {
 
       userStore.setAuth(data)
       ElMessage.success('登录成功')
-      router.replace(route.query.redirect || '/')
+      const isAdmin = data.user?.is_admin || data.user?.isAdmin
+      if (isAdmin) {
+        router.replace('/admin')
+      } else {
+        const redirect = route.query.redirect
+        router.replace(redirect && redirect !== '/login' ? redirect : '/')
+      }
     } catch (error) {
       const msg = error?.response?.data?.message || error?.message || '登录失败'
       ElMessage.error(msg)

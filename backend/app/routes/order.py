@@ -4,7 +4,7 @@
 from flask import Blueprint, request, g
 from flasgger import swag_from
 from app import db
-from app.models.models import Order, OrderItem, ShoppingCart, Address, User, PointsLog
+from app.models.models import Order, OrderItem, ShoppingCart, Address, User, PointsLog, Product
 from app.utils.helpers import (
     success_response, error_response, token_required,
     paginate, generate_order_id
@@ -171,7 +171,17 @@ def create_order():
     if points_used > 0:
         if points_used > user.points:
             return error_response('积分不足')
-        points_discount = min(Decimal(points_used) * Decimal('0.01'), total_amount - discount_amount)
+        max_points_discount = min(
+            Decimal(user.points) * Decimal('0.01'),   # 可用积分换算金额
+            total_amount * Decimal('0.5')             # 订单总额的50%
+        )
+        points_discount = min(
+            Decimal(points_used) * Decimal('0.01'),
+            total_amount - discount_amount,
+            max_points_discount
+        )
+        if Decimal(points_used) * Decimal('0.01') > max_points_discount:
+            return error_response(f'积分抵扣金额不能超过 ¥{max_points_discount:.2f}')
         points_used = int(points_discount * 100)
 
     freight_amount = Decimal('0.00') if total_amount >= Decimal('99.00') else Decimal('10.00')
@@ -359,3 +369,99 @@ def receive_order(order_id):
     except Exception as e:
         db.session.rollback()
         return error_response(f'操作失败: {str(e)}')
+
+@order_bp.route('/exchange', methods=['POST'])
+@token_required
+def create_exchange_order():
+    """积分兑换下单"""
+    user_id = g.current_user_id
+    data = request.get_json() or {}
+
+    product_id = data.get('product_id')
+    quantity = data.get('quantity', 1)
+    address_id = data.get('address_id')
+
+    if not product_id or not address_id:
+        return error_response('参数不完整')
+
+    try:
+        quantity = int(quantity)
+        if quantity <= 0:
+            return error_response('数量必须大于0')
+    except (TypeError, ValueError):
+        return error_response('数量格式错误')
+
+    user = db.session.get(User, user_id)
+    if not user:
+        return error_response('用户不存在', 404)
+
+    product = db.session.get(Product, product_id)
+    if not product or product.status != 1 or (product.exchange_points or 0) <= 0:
+        return error_response('商品不可兑换')
+
+    if product.available_stock < quantity:
+        return error_response('库存不足')
+
+    total_points = product.exchange_points * quantity
+    if user.points < total_points:
+        return error_response('积分不足')
+
+    address = Address.query.filter_by(address_id=address_id, user_id=user_id).first()
+    if not address:
+        return error_response('地址不存在')
+
+    # 生成订单（直接设为已支付，无需支付金额）
+    order_id = generate_order_id()
+    order = Order(
+        order_id=order_id,
+        user_id=user_id,
+        total_amount=Decimal('0.00'),
+        freight_amount=Decimal('0.00'),
+        discount_amount=Decimal('0.00'),
+        points_used=0,
+        points_discount=Decimal('0.00'),
+        payment_amount=Decimal('0.00'),
+        status=1,  # 直接已支付
+        payment_method=4,  # 4-积分兑换
+        payment_time=datetime.utcnow(),
+        address_snapshot=json.dumps(address.to_dict(), ensure_ascii=False),
+        buyer_note=f'积分兑换商品：{product.name} x{quantity}'
+    )
+
+    try:
+        db.session.add(order)
+        db.session.flush()
+
+        order_item = OrderItem(
+            order_id=order_id,
+            product_id=product_id,
+            product_name=product.name,
+            product_image=product.main_image,
+            price=Decimal('0.00'),
+            quantity=quantity,
+            subtotal=Decimal('0.00')
+        )
+        db.session.add(order_item)
+
+        # 扣减积分
+        user.points -= total_points
+        points_log = PointsLog(
+            user_id=user_id,
+            type=2,
+            amount=total_points,
+            balance_after=user.points,
+            source='EXCHANGE',
+            source_id=str(order_id),
+            description=f'积分兑换商品 {product.name} x{quantity}'
+        )
+        db.session.add(points_log)
+
+        # 扣减库存
+        product.stock -= quantity
+        product.sold_count += quantity
+
+        db.session.commit()
+        return success_response({'order_id': str(order_id)}, '兑换成功')
+    except Exception as e:
+        db.session.rollback()
+        return error_response(f'兑换失败: {str(e)}')

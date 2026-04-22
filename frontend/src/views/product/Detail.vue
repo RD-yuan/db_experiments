@@ -110,7 +110,7 @@
               <div class="review-header">
                 <div class="user-info">
                   <el-avatar :size="40">{{ review.user_id }}</el-avatar>
-                  <span class="username">{{ review.is_anonymous ? '匿名用户' : `用户${review.user_id}` }}</span>
+                  <span class="username">{{ review.is_anonymous ? '匿名用户' : review.username }}</span>
                 </div>
                 <el-rate v-model="review.rating" disabled />
               </div>

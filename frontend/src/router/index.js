@@ -83,6 +83,12 @@ const routes = [
             name: 'MyCoupons',
             component: () => import('@/views/user/Coupons.vue'),
             meta: { title: '我的优惠券', requiresAuth: true }
+          },
+          {
+            path: 'points-mall',
+            name: 'PointsMall',
+            component: () => import('@/views/user/PointsMall.vue'),
+            meta: { title: '积分商城', requiresAuth: true }
           }
         ]
       }
@@ -196,6 +202,13 @@ router.beforeEach(async (to) => {
 
     if (userStore.hasUser && !userStore.isAdmin) {
       return '/'
+    }
+  }
+
+  if (userStore.isLoggedIn && userStore.isAdmin) {
+    const isAdminRoute = to.path.startsWith('/admin')
+    if (!isAdminRoute) {
+      return '/admin'
     }
   }
 

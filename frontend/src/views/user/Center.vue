@@ -21,6 +21,10 @@
               <el-icon><Ticket /></el-icon>
               <span>我的优惠券</span>
             </el-menu-item>
+            <el-menu-item index="/user/points-mall">
+              <el-icon><Present /></el-icon>
+              <span>积分商城</span>
+            </el-menu-item>
           </el-menu>
         </el-card>
       </el-col>
