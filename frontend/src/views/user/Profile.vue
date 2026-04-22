@@ -10,14 +10,14 @@
             </div>
           </template>
 
-          <el-form :model="profileForm" label-width="90px">
-            <el-form-item label="用户名">
+          <el-form ref="profileFormRef" :model="profileForm" :rules="profileRules" label-width="90px">
+            <el-form-item label="用户名" prop="username">
               <el-input v-model="profileForm.username" placeholder="请输入用户名" />
             </el-form-item>
-            <el-form-item label="邮箱">
+            <el-form-item label="邮箱" prop="email">
               <el-input v-model="profileForm.email" placeholder="请输入邮箱" />
             </el-form-item>
-            <el-form-item label="手机号">
+            <el-form-item label="手机号" prop="phone">
               <el-input v-model="profileForm.phone" placeholder="请输入手机号" />
             </el-form-item>
             <el-form-item label="性别">
@@ -140,6 +140,7 @@ const saving = ref(false)
 const recharging = ref(false)
 const rechargeDialogVisible = ref(false)
 const profile = ref({})
+const profileFormRef = ref(null)
 
 const profileForm = reactive({
   username: '',
@@ -148,6 +149,23 @@ const profileForm = reactive({
   gender: 0,
   birthday: ''
 })
+
+const profileRules = {
+  username: [
+    { required: true, message: '请输入用户名', trigger: 'blur' },
+    { min: 2, max: 50, message: '用户名长度需在 2 到 50 个字符之间', trigger: 'blur' }
+  ],
+  email: [
+    {
+      pattern: /^$|^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/,
+      message: '请输入正确的邮箱地址',
+      trigger: 'blur'
+    }
+  ],
+  phone: [
+    { pattern: /^$|^1[3-9]\d{9}$/, message: '请输入正确的手机号', trigger: 'blur' }
+  ]
+}
 
 const rechargeForm = reactive({
   amount: 100
@@ -206,6 +224,14 @@ const loadProfile = async () => {
 }
 
 const saveProfile = async () => {
+  if (profileFormRef.value) {
+    try {
+      await profileFormRef.value.validate()
+    } catch {
+      return
+    }
+  }
+
   saving.value = true
   try {
     const res = await api.user.updateProfile({

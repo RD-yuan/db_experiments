@@ -9,6 +9,9 @@ from app.utils.helpers import (
     hash_password, verify_password, generate_token,
     success_response, error_response
 )
+from app.utils.validators import (
+    is_valid_email, is_valid_phone, normalize_email, normalize_optional_text
+)
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -39,12 +42,12 @@ auth_bp = Blueprint('auth', __name__)
 })
 def register():
     """用户注册"""
-    data = request.get_json()
+    data = request.get_json() or {}
     
     username = data.get('username', '').strip()
     password = data.get('password', '')
-    phone = data.get('phone', '').strip() or None
-    email = data.get('email', '').strip() or None
+    phone = normalize_optional_text(data.get('phone'))
+    email = normalize_email(data.get('email'))
     
     # 参数验证
     if not username or not password:
@@ -55,6 +58,12 @@ def register():
     
     if len(password) < 6:
         return error_response('密码长度至少6个字符')
+
+    if phone and not is_valid_phone(phone):
+        return error_response('手机号格式不正确')
+
+    if email and not is_valid_email(email):
+        return error_response('邮箱格式不正确')
     
     # 检查用户名是否已存在
     if User.query.filter_by(username=username).first():

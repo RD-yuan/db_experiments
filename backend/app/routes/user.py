@@ -12,6 +12,9 @@ from app.utils.helpers import (
     success_response, error_response, token_required,
     paginate
 )
+from app.utils.validators import (
+    is_valid_email, is_valid_phone, normalize_email, normalize_optional_text
+)
 
 user_bp = Blueprint('user', __name__)
 
@@ -76,22 +79,26 @@ def update_profile():
 
     # 更新邮箱
     if 'email' in data:
-        email = data['email'].strip() if data['email'] else None
+        email = normalize_email(data.get('email'))
+        if email and not is_valid_email(email):
+            return error_response('邮箱格式不正确')
         if email and email != user.email:
             if User.query.filter(User.email == email, User.user_id != user.user_id).first():
                 return error_response('邮箱已被使用')
             user.email = email
-        elif email == '':
+        elif email is None:
             user.email = None
 
     # 更新手机号
     if 'phone' in data:
-        phone = data['phone'].strip() if data['phone'] else None
+        phone = normalize_optional_text(data.get('phone'))
+        if phone and not is_valid_phone(phone):
+            return error_response('手机号格式不正确')
         if phone and phone != user.phone:
             if User.query.filter(User.phone == phone, User.user_id != user.user_id).first():
                 return error_response('手机号已被使用')
             user.phone = phone
-        elif phone == '':
+        elif phone is None:
             user.phone = None
 
     # 其他字段
@@ -166,12 +173,16 @@ def recharge():
 @token_required
 def add_address():
     """添加收货地址"""
-    data = request.get_json()
+    data = request.get_json() or {}
     
     required = ['recipient_name', 'recipient_phone', 'province', 'city', 'detail_address']
     for field in required:
         if not data.get(field):
             return error_response(f'{field} 不能为空')
+
+    recipient_phone = normalize_optional_text(data.get('recipient_phone'))
+    if not is_valid_phone(recipient_phone):
+        return error_response('收货人手机号格式不正确')
     
     # 检查地址数量限制
     count = Address.query.filter_by(user_id=g.current_user_id).count()
@@ -181,7 +192,7 @@ def add_address():
     address = Address(
         user_id=g.current_user_id,
         recipient_name=data['recipient_name'],
-        recipient_phone=data['recipient_phone'],
+        recipient_phone=recipient_phone,
         province=data['province'],
         city=data['city'],
         district=data.get('district'),
@@ -212,7 +223,13 @@ def update_address(address_id):
     if not address:
         return error_response('地址不存在', 404)
     
-    data = request.get_json()
+    data = request.get_json() or {}
+
+    if 'recipient_phone' in data:
+        recipient_phone = normalize_optional_text(data.get('recipient_phone'))
+        if not is_valid_phone(recipient_phone):
+            return error_response('收货人手机号格式不正确')
+        data['recipient_phone'] = recipient_phone
     
     for field in ['recipient_name', 'recipient_phone', 'province', 'city', 
                   'district', 'detail_address', 'postal_code', 'is_default']:
