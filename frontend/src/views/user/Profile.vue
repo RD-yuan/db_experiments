@@ -68,6 +68,12 @@
                 </el-tag>
               </span>
             </div>
+            <div class="asset-item" v-if="vipActive">
+              <span class="asset-label">当前权益</span>
+              <span class="asset-value subtle">
+                {{ discountText }} · {{ pointsRate }}倍积分
+              </span>
+            </div>
             <div class="asset-item">
               <span class="asset-label">到期时间</span>
               <span class="asset-value subtle">{{ vipExpireText }}</span>
@@ -163,6 +169,18 @@ const vipExpireText = computed(() => {
   if (!vipActive.value) return '暂无有效会员'
   if (!profile.value.vip_expire_time) return '长期有效'
   return new Date(profile.value.vip_expire_time).toLocaleString()
+})
+
+const discountText = computed(() => {
+  const level = profile.value?.vip_level || 0
+  const discounts = { 1: '会员价', 2: '会员价享95折', 3: '会员价享9折' }
+  return discounts[level] || '无折扣'
+})
+
+const pointsRate = computed(() => {
+  const level = profile.value?.vip_level || 0
+  const rates = { 1: 1.2, 2: 1.5, 3: 2.0 }
+  return rates[level] || 1.0
 })
 
 const formatMoney = (value) => Number(value || 0).toFixed(2)

@@ -39,6 +39,11 @@
               {{ hasActiveVip ? '已生效' : '会员专享' }}
             </el-tag>
           </div>
+          <div class="vip-discount-tip" v-if="hasActiveVip && hasVipPrice">
+            <el-tag type="warning" size="small">
+              {{ discountText }}，到手价 ¥{{ finalPrice }}
+            </el-tag>
+          </div>
         </div>
         
         <div class="info-row">
@@ -169,6 +174,22 @@ const quantity = ref(1)
 const activeTab = ref('detail')
 
 const defaultImage = 'https://via.placeholder.com/400x400?text=Product'
+
+const discountFactor = computed(() => {
+  const level = userStore.user?.vip_level || 0
+  const factors = { 1: 1.0, 2: 0.95, 3: 0.9 }
+  return factors[level] || 1.0
+})
+
+const discountText = computed(() => {
+  const level = userStore.user?.vip_level || 0
+  const texts = { 1: '会员价', 2: '金卡95折', 3: '钻石卡9折' }
+  return texts[level] || ''
+})
+
+const finalPrice = computed(() => {
+  return (displayPrice.value * discountFactor.value).toFixed(2)
+})
 
 // 评价相关
 const reviews = ref([])

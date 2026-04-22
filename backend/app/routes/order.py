@@ -1,7 +1,7 @@
 """
 订单路由
 """
-from flask import Blueprint, request, g
+from flask import Blueprint, request, g, current_app
 from flasgger import swag_from
 from app import db
 from app.models.models import Order, OrderItem, ShoppingCart, Address, User, PointsLog, Product
@@ -19,9 +19,20 @@ order_bp = Blueprint('order', __name__)
 def _get_effective_product_price(product, user):
     normal_price = product.price or Decimal('0.00')
     vip_price = product.vip_price
+
+    # 基础价格：会员且会员价有效则取会员价，否则原价
     if user and user.has_active_vip() and vip_price and vip_price > 0 and vip_price < normal_price:
-        return vip_price
-    return normal_price
+        base_price = vip_price
+    else:
+        base_price = normal_price
+
+    # 应用等级折扣（仅VIP用户享受）
+    if user and user.has_active_vip():
+        benefits = current_app.config.get('VIP_BENEFITS', {}).get(user.vip_level, {})
+        discount = benefits.get('discount', 1.0)
+        return base_price * Decimal(str(discount))
+
+    return base_price
 
 
 @order_bp.route('', methods=['GET'])
@@ -323,7 +334,15 @@ def pay_order(order_id):
         order.payment_time = datetime.utcnow()
         order.transaction_id = f"PAY_{order_id}"
 
-        earned_points = int(float(order.payment_amount))
+        # 计算赠送积分（VIP按等级倍率加成）
+        user = order.user   # 已经定义过
+        if user.has_active_vip():
+            benefits = current_app.config.get('VIP_BENEFITS', {}).get(user.vip_level, {})
+            rate = benefits.get('points_rate', 1.0)
+            earned_points = int(float(order.payment_amount) * rate)
+        else:
+            earned_points = int(float(order.payment_amount))
+            
         user.points += earned_points
 
         points_log = PointsLog(

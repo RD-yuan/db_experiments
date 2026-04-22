@@ -48,6 +48,12 @@ class Config:
         {'level': 3, 'name': '钻石会员', 'months': 1, 'price': 49.90},
         {'level': 3, 'name': '钻石会员', 'months': 12, 'price': 499.90},
     ]
+    
+    VIP_BENEFITS = {
+        1: {'name': '银卡', 'discount': 1.0,  'points_rate': 1.2},   # 银卡无额外折扣
+        2: {'name': '金卡', 'discount': 0.95, 'points_rate': 1.5},
+        3: {'name': '钻石卡', 'discount': 0.9,  'points_rate': 2.0},
+    }
 
 class DevelopmentConfig(Config):
     """Development configuration."""
