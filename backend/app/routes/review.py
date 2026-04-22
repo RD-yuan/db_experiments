@@ -152,10 +152,9 @@ def delete_review(review_id):
 @review_bp.route('/my', methods=['GET'])
 @token_required
 def get_my_reviews():
-    """获取我的评价"""
     user_id = g.current_user_id
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 10, type=int)
     query = Review.query.filter_by(user_id=user_id).order_by(Review.create_time.desc())
-    result = paginate(query, page, per_page)
+    result = paginate(query, page, per_page)   # 返回 { items, total, ... }
     return success_response(result)

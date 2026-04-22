@@ -155,17 +155,25 @@ const openReviewDialog = async (item, isEdit = false) => {
   currentOrderItem.value = item
   if (isEdit) {
     try {
-      const reviews = await api.review.getMy()
-      const existing = reviews.items.find(r => r.order_item_id === item.order_item_id)
+      const res = await api.review.getMy({ page: 1, per_page: 100 })
+      const reviewList = res.items || []
+      const existing = reviewList.find(r => r.order_item_id === item.order_item_id)
       if (existing) {
         currentReviewId.value = existing.review_id
         reviewForm.value = {
           rating: existing.rating,
-          comment: existing.comment,
+          comment: existing.comment || '',
           is_anonymous: !!existing.is_anonymous
         }
+      } else {
+        ElMessage.error('未找到评价记录')
+        return
       }
-    } catch (e) { console.error('获取评价失败', e) }
+    } catch (e) {
+      console.error('获取评价失败', e)
+      ElMessage.error('获取评价失败')
+      return
+    }
   } else {
     currentReviewId.value = null
     reviewForm.value = { rating: 5, comment: '', is_anonymous: false }
@@ -196,20 +204,29 @@ const submitReview = async () => {
     }
     reviewDialogVisible.value = false
     loadOrder()
-  } catch (error) { console.error('操作失败:', error) }
-  finally { submitting.value = false }
+  } catch (error) {
+    console.error('操作失败:', error)
+  } finally {
+    submitting.value = false
+  }
 }
 
 const handleDeleteReview = async (item) => {
   try {
     await ElMessageBox.confirm('确定要删除该评价吗？', '提示')
-    const reviews = await api.review.getMy()
-    const target = reviews.items.find(r => r.order_item_id === item.order_item_id)
-    if (!target) return ElMessage.error('未找到评价记录')
+    const res = await api.review.getMy({ page: 1, per_page: 100 })
+    const reviewList = res.items || []
+    const target = reviewList.find(r => r.order_item_id === item.order_item_id)
+    if (!target) {
+      ElMessage.error('未找到评价记录')
+      return
+    }
     await api.review.delete(target.review_id)
     ElMessage.success('评价已删除')
     loadOrder()
-  } catch (error) { if (error !== 'cancel') console.error('删除失败', error) }
+  } catch (error) {
+    if (error !== 'cancel') console.error('删除失败', error)
+  }
 }
 
 onMounted(loadOrder)

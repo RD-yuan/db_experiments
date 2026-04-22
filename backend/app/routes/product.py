@@ -1,10 +1,10 @@
 """
 商品路由
 """
-from flask import Blueprint, request
+from flask import Blueprint, request, g
 from flasgger import swag_from
 from app import db
-from app.models.models import Product, Category, OrderItem, ShoppingCart, Review
+from app.models.models import Product, Category, User, OrderItem, ShoppingCart, Review
 from app.utils.helpers import (
     success_response, error_response, paginate,
     admin_required
@@ -42,11 +42,24 @@ def get_products():
     sort = request.args.get('sort', '')
     order = request.args.get('order', 'desc')
     
-    query = Product.query.filter(Product.status == 1)
+    # 手动解析 Token，判断管理员身份
+    user = None
+    auth_header = request.headers.get('Authorization')
+    if auth_header and auth_header.startswith('Bearer '):
+        token = auth_header.split()[1]
+        from app.utils.helpers import decode_token
+        payload = decode_token(token)
+        if payload:
+            user = db.session.get(User, payload.get('user_id'))
+    
+    # 管理员可查看所有商品，普通用户仅看上架商品
+    if user and user.is_admin:
+        query = Product.query
+    else:
+        query = Product.query.filter(Product.status == 1)
     
     # 分类筛选
     if category_id:
-        # 获取该分类及其所有子分类
         category_ids = [category_id]
         children = Category.query.filter_by(parent_id=category_id).all()
         category_ids.extend([c.category_id for c in children])
@@ -76,7 +89,6 @@ def get_products():
             Product.create_time.asc() if order == 'asc' else Product.create_time.desc()
         )
     else:
-        # 默认按创建时间倒序
         query = query.order_by(Product.create_time.desc())
     
     result = paginate(query, page, per_page)
@@ -95,7 +107,17 @@ def get_product(product_id):
     if not product:
         return error_response('商品不存在', 404)
 
-    if product.status != 1:
+    # 判断当前用户是否为管理员（允许查看下架商品）
+    user = None
+    auth_header = request.headers.get('Authorization')
+    if auth_header and auth_header.startswith('Bearer '):
+        token = auth_header.split()[1]
+        from app.utils.helpers import decode_token
+        payload = decode_token(token)
+        if payload:
+            user = db.session.get(User, payload.get('user_id'))
+
+    if not (user and user.is_admin) and product.status != 1:
         return error_response('商品不存在或已下架', 404)
 
     data = product.to_dict()
