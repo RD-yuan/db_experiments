@@ -408,16 +408,21 @@ def purchase_vip():
 
     months = pkg['months']
     level = pkg['level']
+    now = datetime.utcnow()
+    active_vip = bool(user.is_vip and user.vip_expire_time and user.vip_expire_time > now)
+    current_level = user.vip_level or 0
+    if active_vip and level < current_level:
+        return error_response('已有更高等级VIP，请选择同级或更高等级套餐')
 
     try:
         # 扣款
         user.balance -= price
 
         # 更新VIP信息
-        now = datetime.utcnow()
-        if user.is_vip and user.vip_expire_time and user.vip_expire_time > now:
-            # 已有有效VIP，叠加时长
+        if active_vip:
             user.vip_expire_time = user.vip_expire_time + timedelta(days=months * 30)
+            user.vip_level = level
+            user.is_vip = 1
         else:
             # 新开通或已过期
             user.is_vip = 1

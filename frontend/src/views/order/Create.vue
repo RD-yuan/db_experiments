@@ -134,7 +134,7 @@
 <script>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { api } from '@/api'
 import dayjs from 'dayjs'
 import { useUserStore } from '@/stores/user'

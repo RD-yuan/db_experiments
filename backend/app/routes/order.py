@@ -37,10 +37,14 @@ def _get_effective_product_price(product, user):
 def _calculate_coupon_discount(coupon, total_amount):
     """计算优惠券抵扣金额，返回 (discount_amount, error_msg)"""
     total = Decimal(str(total_amount))
+
+    def clamp_discount(discount):
+        return max(Decimal('0.00'), min(Decimal(str(discount)), total))
+
     if coupon.type == 1:  # 满减券
         if total < coupon.min_order_amount:
             return Decimal('0.00'), f'订单金额不满足满{coupon.min_order_amount}减{coupon.value}'
-        return Decimal(str(coupon.value)), None
+        return clamp_discount(coupon.value), None
     elif coupon.type == 2:  # 折扣券
         if total < coupon.min_order_amount:
             return Decimal('0.00'), f'订单金额不满足使用门槛{coupon.min_order_amount}'
@@ -49,11 +53,11 @@ def _calculate_coupon_discount(coupon, total_amount):
             max_discount = Decimal(str(coupon.max_discount))
             if discount > max_discount:
                 discount = max_discount
-        return discount, None
+        return clamp_discount(discount), None
     elif coupon.type == 3:  # 代金券
         if total < coupon.min_order_amount:
             return Decimal('0.00'), f'订单金额不满足使用门槛{coupon.min_order_amount}'
-        return Decimal(str(coupon.value)), None
+        return clamp_discount(coupon.value), None
     return Decimal('0.00'), '优惠券类型无效'
 
 @order_bp.route('', methods=['GET'])
@@ -203,7 +207,7 @@ def create_order():
     user_coupon_id = data.get('coupon_id')  # 前端传递 user_coupon_id
     if user_coupon_id:
         user_coupon = UserCoupon.query.filter_by(
-            user_coupon_id=user_coupon_id, user_id=user_id, status=0
+            user_coupon_id=user_coupon_id, user_id=user_id, status=0, order_id=None
         ).first()
         if not user_coupon:
             return error_response('优惠券不存在或已使用')
@@ -223,7 +227,7 @@ def create_order():
         used_user_coupon = user_coupon
     # ===================================
 
-    discount_amount = coupon_discount 
+    discount_amount = coupon_discount
     points_discount = Decimal('0.00')
     if points_used > 0:
         if points_used > user.points:
@@ -242,7 +246,10 @@ def create_order():
         points_used = int(points_discount * 100)
 
     freight_amount = Decimal('0.00') if total_amount >= Decimal('99.00') else Decimal('10.00')
-    payment_amount = total_amount + freight_amount - discount_amount - points_discount
+    payment_amount = max(
+        Decimal('0.00'),
+        total_amount + freight_amount - discount_amount - points_discount
+    )
     order_id = generate_order_id()
 
     order = Order(
@@ -293,9 +300,7 @@ def create_order():
             )
             db.session.add(points_log)
         if used_user_coupon:
-            used_user_coupon.status = 1
-            used_user_coupon.use_time = datetime.utcnow()
-            used_user_coupon.order_id = order_id        
+            used_user_coupon.order_id = order_id
         db.session.commit()
         return success_response({
             'order_id': str(order_id),
@@ -341,6 +346,16 @@ def cancel_order(order_id):
             )
             db.session.add(points_log)
 
+        used_coupon = UserCoupon.query.filter(
+            UserCoupon.user_id == order.user_id,
+            UserCoupon.order_id == order.order_id,
+            UserCoupon.status.in_([0, 1])
+        ).first()
+        if used_coupon:
+            used_coupon.status = 0
+            used_coupon.use_time = None
+            used_coupon.order_id = None
+
         db.session.commit()
         return success_response(message='订单已取消')
 
@@ -382,6 +397,15 @@ def pay_order(order_id):
         order.payment_method = 3
         order.payment_time = datetime.utcnow()
         order.transaction_id = f"PAY_{order_id}"
+
+        used_coupon = UserCoupon.query.filter_by(
+            user_id=order.user_id,
+            order_id=order.order_id,
+            status=0
+        ).first()
+        if used_coupon:
+            used_coupon.status = 1
+            used_coupon.use_time = datetime.utcnow()
 
         # 计算赠送积分（VIP按等级倍率加成）
         user = order.user   # 已经定义过

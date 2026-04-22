@@ -75,6 +75,7 @@ CREATE TABLE t_product (
     price DECIMAL(10,2) NOT NULL COMMENT '销售价',
     original_price DECIMAL(10,2) DEFAULT NULL COMMENT '原价',
     vip_price DECIMAL(10,2) DEFAULT NULL COMMENT 'VIP专享价',
+    exchange_points INT NOT NULL DEFAULT 0 COMMENT '积分兑换所需积分，0表示不可兑换',
     stock INT NOT NULL DEFAULT 0 COMMENT '库存数量',
     locked_stock INT DEFAULT 0 COMMENT '锁定库存(下单未支付)',
     sold_count INT DEFAULT 0 COMMENT '累计销量',
@@ -96,6 +97,7 @@ CREATE TABLE t_product (
     INDEX idx_create_time (create_time),
     INDEX idx_is_hot (is_hot),
     INDEX idx_is_new (is_new),
+    INDEX idx_exchange_points (exchange_points),
     
     FOREIGN KEY (category_id) REFERENCES t_category(category_id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='商品表';

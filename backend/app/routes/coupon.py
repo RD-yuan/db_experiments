@@ -63,6 +63,8 @@ def get_my_coupons():
     status = request.args.get('status', 0, type=int)  # 0-未使用 1-已使用 2-已过期
     
     query = UserCoupon.query.filter_by(user_id=user_id, status=status)
+    if status == 0:
+        query = query.filter(UserCoupon.order_id.is_(None))
     user_coupons = query.order_by(UserCoupon.receive_time.desc()).all()
     
     return success_response([uc.to_dict() for uc in user_coupons])

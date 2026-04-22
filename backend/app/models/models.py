@@ -157,7 +157,7 @@ class Product(db.Model):
             'is_hot': self.is_hot or 0,
             'is_new': self.is_new or 0,
             'is_recommend': self.is_recommend or 0,
-            'exchange_points': self.exchange_points or 0 
+            'exchange_points': self.exchange_points or 0
         }
 
 
@@ -273,7 +273,7 @@ class Coupon(db.Model):
             'end_time': self.end_time.isoformat() if self.end_time else None,
             'is_vip_only': self.is_vip_only,
             'status': self.status,
-            'per_user_limit': self.per_user_limit or 1 
+            'per_user_limit': self.per_user_limit or 1
         }
 
 

@@ -211,13 +211,6 @@ router.beforeEach(async (to) => {
     }
   }
 
-  if (userStore.isLoggedIn && userStore.isAdmin) {
-    const isAdminRoute = to.path.startsWith('/admin')
-    if (!isAdminRoute) {
-      return '/admin'
-    }
-  }
-
   return true
 })
 
