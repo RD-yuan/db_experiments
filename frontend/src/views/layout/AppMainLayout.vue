@@ -16,6 +16,7 @@
           <el-badge :value="cartCount" :hidden="cartCount === 0">购物车</el-badge>
         </router-link>
         <router-link to="/orders">我的订单</router-link>
+        <router-link to="/coupon-center">领券中心</router-link>
       </nav>
 
       <!-- 已登录用户区域 -->

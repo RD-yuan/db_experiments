@@ -272,7 +272,8 @@ class Coupon(db.Model):
             'start_time': self.start_time.isoformat() if self.start_time else None,
             'end_time': self.end_time.isoformat() if self.end_time else None,
             'is_vip_only': self.is_vip_only,
-            'status': self.status
+            'status': self.status,
+            'per_user_limit': self.per_user_limit or 1 
         }
 
 

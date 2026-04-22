@@ -54,6 +54,12 @@ const routes = [
         meta: { title: '订单详情', requiresAuth: true }
       },
       {
+          path: 'coupon-center',
+          name: 'CouponCenter',
+          component: () => import('@/views/coupon/CouponCenter.vue'),
+          meta: { title: '领券中心', requiresAuth: true }
+      },
+      {
         path: 'user',
         name: 'UserCenter',
         component: () => import('@/views/user/Center.vue'),
@@ -89,7 +95,7 @@ const routes = [
             name: 'PointsMall',
             component: () => import('@/views/user/PointsMall.vue'),
             meta: { title: '积分商城', requiresAuth: true }
-          }
+          },
         ]
       }
     ]

@@ -4,7 +4,7 @@
 from flask import Blueprint, request, g, current_app
 from flasgger import swag_from
 from app import db
-from app.models.models import Order, OrderItem, ShoppingCart, Address, User, PointsLog, Product
+from app.models.models import Order, OrderItem, ShoppingCart, Address, User, PointsLog, Product,  UserCoupon, Coupon
 from app.utils.helpers import (
     success_response, error_response, token_required,
     paginate, generate_order_id
@@ -34,6 +34,27 @@ def _get_effective_product_price(product, user):
 
     return base_price
 
+def _calculate_coupon_discount(coupon, total_amount):
+    """计算优惠券抵扣金额，返回 (discount_amount, error_msg)"""
+    total = Decimal(str(total_amount))
+    if coupon.type == 1:  # 满减券
+        if total < coupon.min_order_amount:
+            return Decimal('0.00'), f'订单金额不满足满{coupon.min_order_amount}减{coupon.value}'
+        return Decimal(str(coupon.value)), None
+    elif coupon.type == 2:  # 折扣券
+        if total < coupon.min_order_amount:
+            return Decimal('0.00'), f'订单金额不满足使用门槛{coupon.min_order_amount}'
+        discount = total * (1 - Decimal(str(coupon.value)))
+        if coupon.max_discount:
+            max_discount = Decimal(str(coupon.max_discount))
+            if discount > max_discount:
+                discount = max_discount
+        return discount, None
+    elif coupon.type == 3:  # 代金券
+        if total < coupon.min_order_amount:
+            return Decimal('0.00'), f'订单金额不满足使用门槛{coupon.min_order_amount}'
+        return Decimal(str(coupon.value)), None
+    return Decimal('0.00'), '优惠券类型无效'
 
 @order_bp.route('', methods=['GET'])
 @token_required
@@ -176,8 +197,33 @@ def create_order():
             'quantity': item.quantity,
             'subtotal': subtotal
         })
+    # ========== 优惠券处理 ==========
+    coupon_discount = Decimal('0.00')
+    used_user_coupon = None
+    user_coupon_id = data.get('coupon_id')  # 前端传递 user_coupon_id
+    if user_coupon_id:
+        user_coupon = UserCoupon.query.filter_by(
+            user_coupon_id=user_coupon_id, user_id=user_id, status=0
+        ).first()
+        if not user_coupon:
+            return error_response('优惠券不存在或已使用')
+        coupon = user_coupon.coupon
+        if not coupon or coupon.status != 1:
+            return error_response('优惠券已失效')
+        now = datetime.utcnow()
+        if coupon.start_time > now or coupon.end_time < now:
+            return error_response('优惠券不在有效期内')
+        if coupon.is_vip_only and not user.has_active_vip():
+            return error_response('该优惠券仅限VIP使用')
 
-    discount_amount = Decimal('0.00')
+        discount, err = _calculate_coupon_discount(coupon, total_amount)
+        if err:
+            return error_response(err)
+        coupon_discount = discount
+        used_user_coupon = user_coupon
+    # ===================================
+
+    discount_amount = coupon_discount 
     points_discount = Decimal('0.00')
     if points_used > 0:
         if points_used > user.points:
@@ -246,7 +292,10 @@ def create_order():
                 description=f'订单 {order_id} 使用积分'
             )
             db.session.add(points_log)
-
+        if used_user_coupon:
+            used_user_coupon.status = 1
+            used_user_coupon.use_time = datetime.utcnow()
+            used_user_coupon.order_id = order_id        
         db.session.commit()
         return success_response({
             'order_id': str(order_id),
