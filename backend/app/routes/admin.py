@@ -2,6 +2,7 @@
 from flasgger import swag_from
 from datetime import datetime, timedelta
 from sqlalchemy import func
+from decimal import Decimal
 from app import db
 from app.models.models import User, Product, Category, Order, OperationLog, OrderItem, PointsLog, ShoppingCart, Review
 from app.utils.helpers import (
@@ -469,6 +470,22 @@ def process_refund(refund_id):
                         skus = PSku.query.filter_by(product_id=product.product_id).all()
                         for sc in skus:
                             sc.locked_stock = max(0, (sc.locked_stock or 0) - item.quantity)
+
+            # Deduct earned points (from payment reward)
+            earned = int(float(order.payment_amount))
+            if order.user.has_active_vip():
+                benefits = current_app.config.get('VIP_BENEFITS', {}).get(order.user.vip_level, {})
+                rate = benefits.get('points_rate', 1.0)
+                earned = int(float(order.payment_amount) * rate)
+            if earned > 0:
+                actual_deduct = min(earned, user.points)
+                user.points -= actual_deduct
+                db.session.add(PointsLog(
+                    user_id=user.user_id, type=2, amount=earned,
+                    balance_after=user.points, source='REFUND',
+                    source_id=str(order.order_id),
+                    description=f'退货退款扣除赠送积分({actual_deduct})'
+                ))
 
             # Restore coupon
             from app.models.models import UserCoupon
