@@ -1,4 +1,4 @@
-"""
+﻿"""
 用户路由
 """
 from decimal import Decimal, InvalidOperation
@@ -303,9 +303,9 @@ def get_consumption_stats():
 
     # 默认查询最近30天
     if not start_date:
-        start_date = (datetime.utcnow() - timedelta(days=30)).strftime('%Y-%m-%d')
+        start_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
     if not end_date:
-        end_date = datetime.utcnow().strftime('%Y-%m-%d')
+        end_date = datetime.now().strftime('%Y-%m-%d')
 
     start_datetime = datetime.strptime(start_date, '%Y-%m-%d')
     end_datetime = datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1)
@@ -425,7 +425,7 @@ def purchase_vip():
 
     months = pkg['months']
     level = pkg['level']
-    now = datetime.utcnow()
+    now = datetime.now()
     active_vip = bool(user.is_vip and user.vip_expire_time and user.vip_expire_time > now)
     current_level = user.vip_level or 0
     if active_vip and level < current_level:

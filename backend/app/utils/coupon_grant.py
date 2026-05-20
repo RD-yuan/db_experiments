@@ -13,7 +13,7 @@ def grant_coupon_to_user(user_id, coupon_id):
     if not coupon or coupon.status != 1:
         return False
 
-    now = datetime.utcnow()
+    now = datetime.now()
     if coupon.start_time and coupon.start_time > now:
         return False
     if coupon.end_time and coupon.end_time < now:

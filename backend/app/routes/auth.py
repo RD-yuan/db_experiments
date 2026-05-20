@@ -157,7 +157,7 @@ def login():
     
     # 更新登录信息
     from datetime import datetime
-    user.last_login_time = datetime.utcnow()
+    user.last_login_time = datetime.now()
     user.last_login_ip = request.remote_addr
     
     try:

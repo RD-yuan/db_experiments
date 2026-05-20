@@ -1,4 +1,8 @@
-﻿from flask import Blueprint, request, g, current_app
+﻿from decimal import Decimal
+import json
+from datetime import datetime
+
+from flask import Blueprint, request, g, current_app
 from flasgger import swag_from
 from app import db
 from app.models.models import Order, OrderItem, ShoppingCart, Address, User, PointsLog, Product, ProductSku, UserCoupon, Coupon, Refund
@@ -220,7 +224,7 @@ def create_order():
         coupon = user_coupon.coupon
         if not coupon or coupon.status != 1:
             return error_response('优惠券已失效')
-        now = datetime.utcnow()
+        now = datetime.now()
         if coupon.start_time > now or coupon.end_time < now:
             return error_response('优惠券不在有效期内')
         if coupon.is_vip_only and not user.has_active_vip():
@@ -418,7 +422,7 @@ def pay_order(order_id):
 
         order.status = 1
         order.payment_method = 3
-        order.payment_time = datetime.utcnow()
+        order.payment_time = datetime.now()
         order.transaction_id = f"PAY_{order_id}"
 
         used_coupon = UserCoupon.query.filter_by(
@@ -428,7 +432,7 @@ def pay_order(order_id):
         ).first()
         if used_coupon:
             used_coupon.status = 1
-            used_coupon.use_time = datetime.utcnow()
+            used_coupon.use_time = datetime.now()
 
         # 计算赠送积分（VIP按等级倍率加成）
         user = order.user   # 已经定义过
@@ -483,7 +487,7 @@ def receive_order(order_id):
 
     try:
         order.status = 3
-        order.receive_time = datetime.utcnow()
+        order.receive_time = datetime.now()
         db.session.commit()
         return success_response(message='已确认收货')
     except Exception as e:
@@ -543,7 +547,7 @@ def create_exchange_order():
         payment_amount=Decimal('0.00'),
         status=1,  # 直接已支付
         payment_method=4,  # 4-积分兑换
-        payment_time=datetime.utcnow(),
+        payment_time=datetime.now(),
         address_snapshot=json.dumps(address.to_dict(), ensure_ascii=False),
         buyer_note=f'积分兑换商品：{product.name} x{quantity}'
     )

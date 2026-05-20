@@ -92,7 +92,7 @@ def set_user_vip(user_id):
     user.is_vip = is_vip
     user.vip_level = vip_level if is_vip else 0
     user.vip_expire_time = (
-        datetime.utcnow() + timedelta(days=vip_months * 30)
+        datetime.now() + timedelta(days=vip_months * 30)
         if is_vip else None
     )
 
@@ -137,7 +137,7 @@ def ship_order(order_id):
         order.status = 2
         order.shipping_company = shipping_company
         order.shipping_number = shipping_number
-        order.shipping_time = datetime.utcnow()
+        order.shipping_time = datetime.now()
         db.session.commit()
         return success_response(message='发货成功')
     except Exception as e:
@@ -150,7 +150,7 @@ def ship_order(order_id):
 @admin_bp.route('/stats/overview', methods=['GET'])
 @admin_required
 def get_overview():
-    today = datetime.utcnow().date()
+    today = datetime.now().date()
     today_start = datetime.combine(today, datetime.min.time())
     total_users = User.query.count()
     new_users_today = User.query.filter(User.create_time >= today_start).count()
@@ -189,7 +189,7 @@ def get_hot_products():
 @admin_required
 def get_sales_trend():
     days = request.args.get('days', 7, type=int)
-    start_date = datetime.utcnow() - timedelta(days=days)
+    start_date = datetime.now() - timedelta(days=days)
     result = db.session.query(
         func.date(Order.create_time).label('date'),
         func.count(Order.order_id).label('order_count'),
@@ -306,7 +306,7 @@ def off_shelf_product(product_id):
                         item_product.locked_stock = max(0, (item_product.locked_stock or 0) - item.quantity)
 
             order.status = 4  # 已取消
-            order.update_time = datetime.utcnow()
+            order.update_time = datetime.now()
 
         db.session.commit()
         return success_response(message='商品已下架，相关未完成订单已取消并退款')
@@ -345,7 +345,7 @@ def delete_product_permanently(product_id):
 @admin_required
 def sales_chart():
     days = request.args.get('days', 30, type=int)
-    start = datetime.utcnow() - timedelta(days=days)
+    start = datetime.now() - timedelta(days=days)
     rows = db.session.query(
         func.date(Order.create_time).label('date'),
         func.sum(Order.payment_amount).label('amount'),
@@ -378,7 +378,7 @@ def product_rank():
 @admin_required
 def user_growth():
     days = request.args.get('days', 30, type=int)
-    start = datetime.utcnow() - timedelta(days=days)
+    start = datetime.now() - timedelta(days=days)
     rows = db.session.query(
         func.date(User.create_time).label('date'),
         func.count(User.user_id).label('count')

@@ -61,7 +61,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
@@ -70,10 +70,12 @@ import { api } from '@/api'
 const router = useRouter()
 const userStore = useUserStore()
 const cartCount = ref(0)
-const unreadCount = ref(0)
+const unreadCount = computed(() => userStore.unreadCount)
 
 const loadUnread = async () => { try { if (userStore.isLoggedIn) { const r = await api.notification.getUnreadCount(); if (r) userStore.setUnreadCount(r.count) } } catch(e){console.error(e)} }
-onMounted(loadUnread)
+let pollTimer = null
+onMounted(() => { loadUnread(); pollTimer = setInterval(loadUnread, 30000) })
+onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
 
 const handleLogout = async () => {
   await userStore.logout()

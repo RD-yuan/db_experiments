@@ -1,4 +1,4 @@
-"""
+﻿"""
 优惠券路由
 """
 from flask import Blueprint, request, g
@@ -24,7 +24,7 @@ coupon_bp = Blueprint('coupon', __name__)
 def get_available_coupons():
     """获取可领取的优惠券"""
     user = db.session.get(User, g.current_user_id)
-    now = datetime.utcnow()
+    now = datetime.now()
     
     # 查询可领取的优惠券
     coupons = Coupon.query.filter(
@@ -80,7 +80,7 @@ def receive_coupon(coupon_id):
     if not coupon or coupon.status != 1:
         return error_response('优惠券不存在')
     
-    now = datetime.utcnow()
+    now = datetime.now()
     
     # 检查有效期
     if coupon.start_time > now or coupon.end_time < now:

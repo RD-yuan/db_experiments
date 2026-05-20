@@ -17,6 +17,8 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { api } from '@/api'
+import { useUserStore } from '@/stores/user'
+const userStore = useUserStore()
 const loading = ref(false), list = ref([]), page = ref(1), total = ref(0), unreadCount = ref(0)
 const load = async () => {
   loading.value = true
@@ -30,7 +32,7 @@ const load = async () => {
 const loadUnread = async () => {
   try {
     const r = await api.notification.getUnreadCount()
-    if (r) unreadCount.value = r.count
+    if (r) { unreadCount.value = r.count; userStore.setUnreadCount(r.count) }
   } catch(e){console.error(e)}
 }
 const markRead = async (n) => {
@@ -39,13 +41,14 @@ const markRead = async (n) => {
     await api.notification.markRead(n.id)
     n.is_read = 1
     unreadCount.value = Math.max(0, unreadCount.value - 1)
+    userStore.setUnreadCount(unreadCount.value)
   } catch(e){console.error(e)}
 }
 const readAll = async () => {
   try {
     await api.notification.readAll()
     list.value.forEach(n => n.is_read = 1)
-    unreadCount.value = 0
+    unreadCount.value = 0; userStore.setUnreadCount(0)
   } catch(e){console.error(e)}
 }
 onMounted(() => { load(); loadUnread() })
