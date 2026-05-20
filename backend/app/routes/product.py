@@ -1,7 +1,8 @@
-"""
+﻿"""
 商品路由
 """
 from flask import Blueprint, request, g
+from sqlalchemy import func, select
 from flasgger import swag_from
 from app import db
 from app.models.models import Product, Category, User, OrderItem, ShoppingCart, Review
@@ -65,9 +66,29 @@ def get_products():
         category_ids.extend([c.category_id for c in children])
         query = query.filter(Product.category_id.in_(category_ids))
     
-    # 关键词搜索
+    # 关键词搜索（名称 / 描述 / 品牌 / 分类名 / 标签名）
     if keyword:
-        query = query.filter(Product.name.like(f'%{keyword}%'))
+        from app.models.models import Tag, ProductTag
+
+        # 匹配标签的商品 ID 子查询
+        tag_match_subq = (
+            db.session.query(ProductTag.product_id)
+            .join(Tag, Tag.tag_id == ProductTag.tag_id)
+            .filter(Tag.name.like(f'%{keyword}%'))
+            .subquery()
+        )
+
+        keyword_filter = db.or_(
+            Product.name.like(f'%{keyword}%'),
+            Product.description.like(f'%{keyword}%'),
+            Product.brand.like(f'%{keyword}%'),
+            Product.product_id.in_(tag_match_subq)
+        )
+
+        # 分类名搜索需要 outerjoin Category
+        query = query.outerjoin(Category, Product.category_id == Category.category_id)
+        keyword_filter = db.or_(keyword_filter, Category.name.like(f'%{keyword}%'))
+        query = query.filter(keyword_filter)
     
     # 价格区间
     if min_price is not None:
@@ -79,6 +100,21 @@ def get_products():
     if sort == 'price':
         query = query.order_by(
             Product.price.asc() if order == 'asc' else Product.price.desc()
+        )
+    elif sort == 'rating':
+        avg_subq = (
+            select(
+                Review.product_id,
+                func.coalesce(func.avg(Review.rating), 0),
+                func.count(Review.review_id).label('avg_rating')
+            )
+            .where(Review.status == 1)
+            .group_by(Review.product_id)
+            .subquery()
+        )
+        query = query.outerjoin(avg_subq, Product.product_id == avg_subq.c.product_id)
+        query = query.order_by(
+            avg_subq.c.avg_rating.desc() if order != 'asc' else avg_subq.c.avg_rating.asc()
         )
     elif sort == 'sold':
         query = query.order_by(
@@ -92,6 +128,26 @@ def get_products():
         query = query.order_by(Product.create_time.desc())
     
     result = paginate(query, page, per_page)
+
+    # 为每个商品附加平均评分
+    if sort == 'rating' and result['items']:
+        rating_map = {}
+        product_ids = [p['product_id'] for p in result['items']]
+        rating_rows = (
+            db.session.query(
+                Review.product_id,
+                func.coalesce(func.avg(Review.rating), 0),
+                func.count(Review.review_id)
+            )
+            .filter(Review.product_id.in_(product_ids), Review.status == 1)
+            .group_by(Review.product_id)
+            .all()
+        )
+        rating_map = {row[0]: (float(row[1]), row[2]) for row in rating_rows}
+        for product_dict in result['items']:
+            avg_rating, review_count = rating_map.get(product_dict['product_id'], (0, 0))
+            product_dict['avg_rating'] = round(avg_rating, 1)
+            product_dict['review_count'] = review_count
     return success_response(result)
 
 
@@ -166,6 +222,7 @@ def get_exchange_products():
     ).order_by(Product.create_time.desc())
 
     result = paginate(query, page, per_page)
+
     return success_response(result)
 
 # ============ 管理员接口 ============

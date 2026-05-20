@@ -1,10 +1,11 @@
-import { defineStore } from 'pinia'
+﻿import { defineStore } from 'pinia'
 import { api } from '@/api'
 import { getToken, setToken as persistToken, removeToken } from '@/utils/auth'
 
 export const useUserStore = defineStore('user', {
   state: () => ({
     user: null,
+    unreadCount: 0,
     token: getToken() || null,
     _ensureSessionPromise: null
   }),
@@ -29,6 +30,7 @@ export const useUserStore = defineStore('user', {
       this.setUser(authData?.user || null)
     },
 
+    setUnreadCount(n) { this.unreadCount = n },
     clearAuth() {
       this.user = null
       this.token = null

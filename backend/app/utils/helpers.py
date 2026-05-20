@@ -1,7 +1,10 @@
-"""
+﻿"""
 工具函数模块
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+def beijing_now():
+    return (datetime.now(timezone.utc) + timedelta(hours=8)).replace(tzinfo=None)
 import jwt
 import bcrypt
 from flask import current_app, g

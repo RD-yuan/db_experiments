@@ -1,17 +1,12 @@
-"""
-订单路由
-"""
-from flask import Blueprint, request, g, current_app
+﻿from flask import Blueprint, request, g, current_app
 from flasgger import swag_from
 from app import db
-from app.models.models import Order, OrderItem, ShoppingCart, Address, User, PointsLog, Product,  UserCoupon, Coupon
+from app.models.models import Order, OrderItem, ShoppingCart, Address, User, PointsLog, Product, ProductSku, UserCoupon, Coupon, Refund
+from app.utils.coupon_grant import grant_order_amount_coupon
 from app.utils.helpers import (
     success_response, error_response, token_required,
     paginate, generate_order_id
 )
-import json
-from decimal import Decimal
-from datetime import datetime
 
 order_bp = Blueprint('order', __name__)
 
@@ -185,15 +180,26 @@ def create_order():
         if not item.product or item.product.status != 1:
             return error_response(f'商品 {item.product.name if item.product else ""} 已下架')
 
-        if item.product.available_stock < item.quantity:
+        sku = None
+        if item.sku_id:
+            sku = db.session.get(ProductSku, item.sku_id)
+            if not sku or sku.product_id != item.product_id:
+                return error_response(f'商品 {item.product.name} 的SKU不存在')
+            if sku.available_stock < item.quantity:
+                return error_response(f'商品 {item.product.name} - {sku.spec_text} 库存不足')
+        elif item.product.available_stock < item.quantity:
             return error_response(f'商品 {item.product.name} 库存不足')
 
-        price = _get_effective_product_price(item.product, user)
+        if sku and sku.price:
+            price = sku.price
+        else:
+            price = _get_effective_product_price(item.product, user)
         subtotal = price * item.quantity
         total_amount += subtotal
 
         order_items.append({
             'product': item.product,
+            'sku': sku,
             'product_id': item.product_id,
             'product_name': item.product.name,
             'product_image': item.product.main_image,
@@ -280,9 +286,14 @@ def create_order():
                 subtotal=item_data['subtotal']
             )
             db.session.add(order_item)
-            if item_data['product'].locked_stock is None:
-                item_data['product'].locked_stock = 0
-            item_data['product'].locked_stock += item_data['quantity']
+            if item_data.get('sku'):
+                if item_data['sku'].locked_stock is None:
+                    item_data['sku'].locked_stock = 0
+                item_data['sku'].locked_stock += item_data['quantity']
+            else:
+                if item_data['product'].locked_stock is None:
+                    item_data['product'].locked_stock = 0
+                item_data['product'].locked_stock += item_data['quantity']
 
         for item in cart_items:
             db.session.delete(item)
@@ -329,6 +340,10 @@ def cancel_order(order_id):
             product = item.product
             if product:
                 product.locked_stock -= item.quantity
+            if product.has_sku:
+                sku_list = ProductSku.query.filter_by(product_id=product.product_id).all()
+                for sc in sku_list:
+                    sc.locked_stock = max(0, (sc.locked_stock or 0) - item.quantity)
 
         order.status = 4
 
@@ -391,7 +406,15 @@ def pay_order(order_id):
                     raise Exception(f'商品 {product.name} 库存不足')
                 product.stock -= item.quantity
                 product.locked_stock -= item.quantity
+            if product.has_sku:
+                sku_list = ProductSku.query.filter_by(product_id=product.product_id).all()
+                for sc in sku_list:
+                    sc.locked_stock = max(0, (sc.locked_stock or 0) - item.quantity)
                 product.sold_count += item.quantity
+                if product.has_sku:
+                    sku_candidates = ProductSku.query.filter_by(product_id=product.product_id).all()
+                    for sc in sku_candidates:
+                        sc.locked_stock = max(0, (sc.locked_stock or 0) - item.quantity)
 
         order.status = 1
         order.payment_method = 3
@@ -428,6 +451,11 @@ def pay_order(order_id):
             description=f'订单 {order_id} 购物赠送'
         )
         db.session.add(points_log)
+
+        try:
+            grant_order_amount_coupon(user.user_id, order.payment_amount)
+        except Exception:
+            pass
 
         db.session.commit()
         return success_response(message='支付成功')
@@ -557,3 +585,42 @@ def create_exchange_order():
     except Exception as e:
         db.session.rollback()
         return error_response(f'兑换失败: {str(e)}')
+
+
+# ============ Refund ============
+
+@order_bp.route('/<int:order_id>/refund', methods=['POST'])
+@token_required
+def apply_refund(order_id):
+    order = Order.query.filter_by(order_id=order_id, user_id=g.current_user_id).first()
+    if not order: return error_response('订单不存在', 404)
+    if order.status != 3: return error_response('只能对已完成的订单申请退货')
+
+    from app.models.models import Refund
+    latest = Refund.query.filter_by(order_id=order_id).order_by(Refund.id.desc()).first()
+    if latest and latest.status == 0: return error_response('已有待审核的退货申请')
+
+    data = request.get_json() or {}
+    reason = data.get('reason', '')
+    if not reason.strip(): return error_response('请填写退货原因')
+
+    try:
+        order.status = 6
+        order.refund_reason = reason
+        refund = Refund(order_id=order_id, user_id=g.current_user_id, reason=reason)
+        db.session.add(refund)
+        db.session.commit()
+        return success_response(message='退货申请已提交')
+    except Exception as e:
+        db.session.rollback()
+        return error_response(f'提交失败: {str(e)}')
+
+
+@order_bp.route('/refunds', methods=['GET'])
+@token_required
+def get_my_refunds():
+    """Get user's refund list."""
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 100, type=int)
+    q = Refund.query.filter_by(user_id=g.current_user_id).order_by(Refund.create_time.desc())
+    return success_response(paginate(q, page, per_page))

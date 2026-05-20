@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="order-list">
     <div class="page-title">我的订单</div>
 
@@ -9,6 +9,8 @@
       <el-tab-pane label="已支付" name="1" />
       <el-tab-pane label="已发货" name="2" />
       <el-tab-pane label="已完成" name="3" />
+      <el-tab-pane label="退款处理中" name="6" />
+      <el-tab-pane label="已退款" name="5" />
       <el-tab-pane label="已取消" name="4" />
     </el-tabs>
 
@@ -49,6 +51,9 @@
             </el-button>
             <el-button v-if="order.status === 0" @click="handleCancel(String(order.order_id))">
               取消订单
+            </el-button>
+            <el-button v-if="canReturn(order)" type="warning" @click="handleRefundClick(order)">
+              申请退货
             </el-button>
             <el-button v-if="order.status === 2" type="primary" @click="handleReceive(String(order.order_id))">
               确认收货
@@ -164,6 +169,17 @@ const handleCancel = async (orderId) => {
       console.error('取消订单失败:', error)
     }
   }
+}
+
+const canReturn = (order) => { return order.status === 3 }
+
+const handleRefundClick = async (order) => {
+  try {
+    const { value: reason } = await ElMessageBox.prompt('请填写退货原因', '申请退货', { confirmButtonText: '提交' })
+    await api.order.applyRefund(String(order.order_id), { reason })
+    ElMessage.success('退货申请已提交')
+    loadOrders()
+  } catch(e) { if (e !== 'cancel') console.error(e) }
 }
 
 const handleReceive = async (orderId) => {

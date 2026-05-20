@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="order-detail" v-loading="loading">
     <el-card v-if="order">
       <template #header>
@@ -91,8 +91,10 @@ const currentReviewId = ref(null)
 
 const reviewForm = ref({ rating: 5, comment: '', is_anonymous: false })
 
+const canRefund = computed(() => { if (!order.value || order.value.user_id !== userStore.user?.user_id) return false; if (order.value.status !== 3) return false; return true })
+
 const statusType = computed(() => {
-  const types = { 0: 'warning', 1: 'primary', 2: 'info', 3: 'success', 4: 'info', 5: 'danger' }
+  const types = { 0: 'warning', 1: 'primary', 2: 'info', 3: 'success', 4: 'info', 5: 'danger', 6: 'warning' }
   return types[order.value?.status] || 'info'
 })
 
@@ -233,6 +235,8 @@ const handleDeleteReview = async (item) => {
     if (error !== 'cancel') console.error('删除失败', error)
   }
 }
+
+const handleRefund = async () => { try { const { value: reason } = await ElMessageBox.prompt('请填写退货原因', '申请退货', { confirmButtonText: '提交' }); await api.order.applyRefund(String(order.value.order_id), { reason }); ElMessage.success('退货申请已提交'); loadOrder() } catch(e) { if (e !== 'cancel') console.error(e) } }
 
 onMounted(loadOrder)
 </script>

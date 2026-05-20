@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="product-list">
     <!-- 搜索和筛选 -->
     <div class="filter-section card">
@@ -30,6 +30,7 @@
             <el-option label="价格升序" value="price_asc" />
             <el-option label="价格降序" value="price_desc" />
             <el-option label="销量优先" value="sold_desc" />
+            <el-option label="评分最高" value="rating_desc" />
             <el-option label="新品优先" value="new_desc" />
           </el-select>
         </el-form-item>
@@ -75,6 +76,9 @@
             <span v-if="product.vip_price" class="vip-price">VIP ¥{{ product.vip_price }}</span>
           </div>
           <div class="product-meta">
+            <span v-if="product.review_count > 0" class="rating">
+               {{ product.avg_rating }} 
+            </span>
             <span>销量 {{ product.sold_count }}</span>
             <span v-if="product.available_stock < 10" class="low-stock">仅剩 {{ product.available_stock }} 件</span>
           </div>
@@ -317,6 +321,14 @@ onMounted(() => {
     display: flex;
     justify-content: space-between;
     
+    .rating {
+      color: #e6a23c;
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      font-size: 12px;
+      font-weight: 500;
+    }
     .low-stock {
       color: #f56c6c;
     }

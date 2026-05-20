@@ -1,4 +1,4 @@
--- ============================================================
+﻿-- ============================================================
 -- 电子商务平台数据库设计
 -- 数据库: MySQL 8.0
 -- 字符集: utf8mb4
@@ -344,6 +344,82 @@ CREATE TABLE t_operation_log (
     INDEX idx_create_time (create_time),
     INDEX idx_result (result)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='操作日志表';
+
+
+-- ============================================================
+-- 13. 商品标签表 (t_tag)
+-- ============================================================
+DROP TABLE IF EXISTS t_product_tag;
+DROP TABLE IF EXISTS t_tag;
+CREATE TABLE t_tag (
+    tag_id INT AUTO_INCREMENT PRIMARY KEY COMMENT '标签ID',
+    name VARCHAR(50) NOT NULL UNIQUE COMMENT '标签名称',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='商品标签表';
+
+-- ============================================================
+-- 14. 商品标签关联表 (t_product_tag)
+-- ============================================================
+CREATE TABLE t_product_tag (
+    id INT AUTO_INCREMENT PRIMARY KEY COMMENT '关联ID',
+    product_id INT NOT NULL COMMENT '商品ID',
+    tag_id INT NOT NULL COMMENT '标签ID',
+    UNIQUE KEY uk_product_tag (product_id, tag_id),
+    INDEX idx_product_id (product_id),
+    INDEX idx_tag_id (tag_id),
+    FOREIGN KEY (product_id) REFERENCES t_product(product_id) ON DELETE CASCADE,
+    FOREIGN KEY (tag_id) REFERENCES t_tag(tag_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='商品标签关联表';
+-- ============================================================
+-- 15. 规格模板表 (t_spec_template)
+-- ============================================================
+DROP TABLE IF EXISTS t_product_sku;
+DROP TABLE IF EXISTS t_spec_value;
+DROP TABLE IF EXISTS t_spec_template;
+CREATE TABLE t_spec_template (
+    template_id INT AUTO_INCREMENT PRIMARY KEY COMMENT '规格模板ID',
+    name VARCHAR(50) NOT NULL COMMENT '规格名称（如颜色、尺寸）',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='规格模板表';
+
+-- ============================================================
+-- 16. 规格值表 (t_spec_value)
+-- ============================================================
+CREATE TABLE t_spec_value (
+    value_id INT AUTO_INCREMENT PRIMARY KEY COMMENT '规格值ID',
+    template_id INT NOT NULL COMMENT '所属模板ID',
+    value VARCHAR(50) NOT NULL COMMENT '规格值（如红色、XL）',
+    sort_order INT DEFAULT 0,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_template_id (template_id),
+    FOREIGN KEY (template_id) REFERENCES t_spec_template(template_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='规格值表';
+
+-- ============================================================
+-- 17. 商品SKU表 (t_product_sku)
+-- ============================================================
+CREATE TABLE t_product_sku (
+    sku_id INT AUTO_INCREMENT PRIMARY KEY COMMENT 'SKU ID',
+    product_id INT NOT NULL COMMENT '商品ID',
+    spec_ids VARCHAR(500) NOT NULL COMMENT '规格值ID组合，JSON数组',
+    spec_text VARCHAR(200) COMMENT '规格文字描述',
+    price DECIMAL(10,2) COMMENT 'SKU价格（NULL使用商品基础价）',
+    stock INT NOT NULL DEFAULT 0 COMMENT 'SKU库存',
+    locked_stock INT DEFAULT 0 COMMENT 'SKU锁定库存',
+    image VARCHAR(255) COMMENT 'SKU图片',
+    status TINYINT DEFAULT 1 COMMENT '状态: 0-禁用 1-启用',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_product_id (product_id),
+    FOREIGN KEY (product_id) REFERENCES t_product(product_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='商品SKU表';
+
+-- 商品表增加 has_sku 字段
+ALTER TABLE t_product
+    ADD COLUMN has_sku TINYINT NOT NULL DEFAULT 0 COMMENT '是否有多规格: 0-否 1-是' AFTER exchange_points,
+    ADD INDEX idx_has_sku (has_sku);
+
 
 -- ============================================================
 -- 创建视图：商品统计视图

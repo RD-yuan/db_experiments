@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="product-detail" v-loading="loading">
     <!-- 商品信息 -->
     <div class="product-main">
@@ -23,48 +23,48 @@
         <div class="price-section">
           <div class="price-row">
             <span class="label">价格</span>
-            <span class="current-price">¥{{ displayPrice }}</span>
-            <span class="original-price" v-if="hasActiveVip && hasVipPrice">
-              ¥{{ product.price }}
-            </span>
-            <span class="original-price" v-else-if="product.original_price && product.original_price > product.price">
-              ¥{{ product.original_price }}
-            </span>
+            <span class="current-price">¥{{ currentSku && currentSku.price !== null ? currentSku.price : displayPrice }}</span>
+            <span class="original-price" v-if="showOriginalPrice">¥{{ skuOriginalPrice || product.price }}</span>
           </div>
-          
-          <div class="vip-price-row" v-if="hasVipPrice">
-            <span class="label">{{ hasActiveVip ? '会员价' : 'VIP价' }}</span>
-            <span class="vip-price">¥{{ product.vip_price }}</span>
-            <el-tag :type="hasActiveVip ? 'success' : 'danger'" size="small" style="margin-left: 10px">
-              {{ hasActiveVip ? '已生效' : '会员专享' }}
-            </el-tag>
+          <div class="price-row vip-row" v-if="hasVipPrice">
+            <span class="label">VIP专享价</span>
+            <span class="vip-price">¥{{ skuVipPrice }}</span>
+            <el-tag v-if="hasActiveVip" type="success" size="small" style="margin-left: 8px">已生效</el-tag>
+            <el-tag v-else type="danger" size="small" style="margin-left: 8px">会员专享</el-tag>
           </div>
-          <div class="vip-discount-tip" v-if="hasActiveVip && hasVipPrice">
+          <div class="vip-discount-tip" v-if="hasActiveVip">
             <el-tag type="warning" size="small">
               {{ discountText }}，到手价 ¥{{ finalPrice }}
             </el-tag>
           </div>
-        </div>
-        
-        <div class="info-row">
+        </div><div class="info-row">
           <span class="label">销量</span>
           <span>{{ product.sold_count || 0 }} 件</span>
         </div>
         
         <div class="info-row">
           <span class="label">库存</span>
-          <span :class="{ 'low-stock': product.available_stock < 10 }">
-            {{ product.available_stock }} 件
-            <el-tag v-if="product.available_stock < 10" type="warning" size="small">库存紧张</el-tag>
+          <span :class="{ 'low-stock': (currentSku ? currentSku.available_stock : product.available_stock) < 10 }">
+            {{ currentSku ? currentSku.available_stock : product.available_stock }} 件
+            <el-tag v-if="(currentSku ? currentSku.available_stock : product.available_stock) < 10" type="warning" size="small">库存紧张</el-tag>
           </span>
         </div>
         
-        <div class="quantity-section">
+        <div class="sku-section" v-if="product.has_sku && product.skus.length > 0">
+          <div v-for="tpl in skuTemplates" :key="tpl.template_id" class="sku-group">
+            <span class="label">{{ tpl.name }}</span>
+            <div class="sku-options">
+              <el-button v-for="val in tpl.values" :key="val.value_id" :type="selectedSpecs[tpl.template_id] === val.value_id ? 'primary' : 'default'" size="small" @click="selectSpec(tpl.template_id, val.value_id)">{{ val.value }}</el-button>
+            </div>
+          </div>
+        </div>
+
+<div class="quantity-section">
           <span class="label">数量</span>
           <el-input-number
             v-model="quantity"
             :min="1"
-            :max="product.available_stock"
+            :max="currentSku ? currentSku.available_stock : product.available_stock"
             size="large"
           />
         </div>
@@ -73,7 +73,7 @@
           <el-button
             type="primary"
             size="large"
-            :disabled="product.available_stock === 0 || product.status !== 1"
+            :disabled="(currentSku ? currentSku.available_stock : product.available_stock) === 0 || product.status !== 1"
             @click="addToCart"
           >
             <el-icon><ShoppingCartFull /></el-icon>
@@ -82,7 +82,7 @@
           <el-button
             size="large"
             @click="buyNow"
-            :disabled="product.available_stock === 0 || product.status !== 1"
+            :disabled="(currentSku ? currentSku.available_stock : product.available_stock) === 0 || product.status !== 1"
           >
             立即购买
           </el-button>
@@ -104,9 +104,10 @@
         <div class="reviews-section">
           <div class="rating-summary">
             <div class="avg-rating">
-              <span class="rating-value">{{ avgRating }}</span>
-              <el-rate v-model="avgRating" disabled show-score text-color="#ff9900" />
-              <span class="review-count">{{ reviewTotal }} 条评价</span>
+
+              <span class="rating-value">{{ reviewTotal > 0 ? avgRating : '-' }}</span>
+              <el-rate v-if="reviewTotal > 0" v-model="avgRating" disabled show-score text-color="#ff9900" />
+              <span class="review-count">{{ reviewTotal > 0 ? reviewTotal + ' 条评价' : '暂无评价' }}</span>
             </div>
           </div>
           
@@ -171,6 +172,46 @@ const userStore = useUserStore()
 const loading = ref(false)
 const product = ref({})
 const quantity = ref(1)
+const selectedSpecs = ref({})
+const currentSku = ref(null)
+const skuTemplates = ref([])
+
+const findMatchingSku = () => {
+  if (!product.value.has_sku || !product.value.skus) return null
+  const selectedIds = Object.values(selectedSpecs.value).filter(Boolean)
+  if (selectedIds.length === 0) return null
+  return product.value.skus.find(sku => {
+    let specIds = sku.spec_ids
+    if (typeof specIds === 'string') specIds = JSON.parse(specIds)
+    if (selectedIds.length !== specIds.length) return false
+    return selectedIds.every(id => specIds.includes(id))
+  }) || null
+}
+
+const selectSpec = (templateId, valueId) => {
+  selectedSpecs.value[templateId] = valueId
+  currentSku.value = findMatchingSku()
+}
+
+const loadSkuTemplates = async () => {
+  if (!product.value.has_sku) return
+  try {
+    const templates = await api.product.getSpecTemplates()
+    if (!templates) return
+    const usedSpecIds = new Set()
+    product.value.skus.forEach(sku => {
+      let ids = sku.spec_ids
+      if (typeof ids === 'string') ids = JSON.parse(ids)
+      ids.forEach(id => usedSpecIds.add(id))
+    })
+    skuTemplates.value = templates
+      .map(tpl => ({
+        ...tpl,
+        values: tpl.values.filter(v => usedSpecIds.has(v.value_id))
+      }))
+      .filter(tpl => tpl.values.length > 0)
+  } catch (e) { console.error(e) }
+}
 const activeTab = ref('detail')
 
 const defaultImage = 'https://via.placeholder.com/400x400?text=Product'
@@ -187,8 +228,22 @@ const discountText = computed(() => {
   return texts[level] || ''
 })
 
+const effectiveBasePrice = computed(() => {
+  if (currentSku.value && currentSku.value.price !== null && currentSku.value.price !== undefined) {
+    return Number(currentSku.value.price)
+  }
+  return Number(product.value.price || 0)
+})
+
 const finalPrice = computed(() => {
-  return (displayPrice.value * discountFactor.value).toFixed(2)
+  const baseForDiscount = computed(() => {
+  if (hasActiveVip.value && hasVipPrice.value) {
+    return skuVipPrice.value
+  }
+  return effectiveBasePrice.value
+})
+
+  return (baseForDiscount.value * discountFactor.value).toFixed(2)
 })
 
 // 评价相关
@@ -197,7 +252,7 @@ const reviewPage = ref(1)
 const reviewTotal = ref(0)
 
 const avgRating = computed(() => {
-  if (reviews.value.length === 0) return 5
+  if (reviews.value.length === 0) return 0
   const sum = reviews.value.reduce((acc, r) => acc + r.rating, 0)
   return (sum / reviews.value.length).toFixed(1)
 })
@@ -218,17 +273,34 @@ const hasActiveVip = computed(() => {
   return new Date(user.vip_expire_time).getTime() > Date.now()
 })
 
+const skuOriginalPrice = computed(() => {
+  if (currentSku.value && currentSku.value.original_price !== null && currentSku.value.original_price !== undefined) {
+    return Number(currentSku.value.original_price)
+  }
+  return Number(product.value.original_price || 0)
+})
+
+const showOriginalPrice = computed(() => {
+  return skuOriginalPrice.value > 0 && skuOriginalPrice.value > effectiveBasePrice.value
+})
+
+const showVipPrice = computed(() => {
+  return hasVipPrice.value && !currentSku.value
+})
+
+const skuVipPrice = computed(() => {
+  if (currentSku.value && currentSku.value.vip_price !== null && currentSku.value.vip_price !== undefined && currentSku.value.vip_price > 0) {
+    return Number(currentSku.value.vip_price)
+  }
+  return Number(product.value.vip_price || 0)
+})
+
 const hasVipPrice = computed(() => {
-  const vipPrice = Number(product.value.vip_price || 0)
-  const price = Number(product.value.price || 0)
-  return vipPrice > 0 && vipPrice < price
+  return skuVipPrice.value > 0 && skuVipPrice.value < effectiveBasePrice.value
 })
 
 const displayPrice = computed(() => {
-  if (hasActiveVip.value && hasVipPrice.value) {
-    return product.value.vip_price
-  }
-  return product.value.price
+  return effectiveBasePrice.value
 })
 
 const loadProduct = async () => {
@@ -304,7 +376,7 @@ const formatDate = (date) => {
 
 onMounted(() => {
   hydrateUser()
-  loadProduct()
+  loadProduct().then(() => loadSkuTemplates())
   loadReviews()
 })
 </script>
@@ -436,6 +508,14 @@ onMounted(() => {
     }
   }
   
+  .sku-section {
+    padding: 15px 0;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  .sku-section .sku-group { display: flex; align-items: center; margin-bottom: 10px; }
+  .sku-section .label { width: 60px; color: #999; flex-shrink: 0; }
+  .sku-section .sku-options { display: flex; gap: 8px; flex-wrap: wrap; }
+
   .quantity-section {
     display: flex;
     align-items: center;

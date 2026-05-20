@@ -1,4 +1,4 @@
-"""
+﻿"""
 Flask configuration.
 """
 import os
@@ -55,6 +55,11 @@ class Config:
         3: {'name': '钻石卡', 'discount': 0.9,  'points_rate': 2.0},
     }
 
+
+    # Coupon auto-grant config
+    NEW_USER_COUPON_ID = int(os.environ.get('NEW_USER_COUPON_ID', 1))
+    ORDER_AMOUNT_COUPON_ID = int(os.environ.get('ORDER_AMOUNT_COUPON_ID', 2))
+    ORDER_AMOUNT_THRESHOLD = float(os.environ.get('ORDER_AMOUNT_THRESHOLD', 200))
 class DevelopmentConfig(Config):
     """Development configuration."""
 

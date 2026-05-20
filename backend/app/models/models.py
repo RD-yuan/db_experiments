@@ -1,7 +1,12 @@
-"""
+﻿"""
 SQLAlchemy 数据模型
 """
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+
+BEIJING_TZ = timezone(timedelta(hours=8))
+
+def beijing_now():
+    return datetime.now(BEIJING_TZ).replace(tzinfo=None)
 from app import db
 
 
@@ -25,8 +30,8 @@ class User(db.Model):
     status = db.Column(db.SmallInteger, default=1)  # 0-禁用 1-正常
     last_login_time = db.Column(db.DateTime)
     last_login_ip = db.Column(db.String(50))
-    create_time = db.Column(db.DateTime, default=datetime.utcnow)
-    update_time = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    create_time = db.Column(db.DateTime, default=beijing_now)
+    update_time = db.Column(db.DateTime, default=beijing_now, onupdate=datetime.utcnow)
     is_admin = db.Column(db.SmallInteger, default=0)  # 0-普通用户 1-管理员
     
     # 关联
@@ -87,8 +92,8 @@ class Category(db.Model):
     icon = db.Column(db.String(255))
     sort_order = db.Column(db.Integer, default=0)
     status = db.Column(db.SmallInteger, default=1)
-    create_time = db.Column(db.DateTime, default=datetime.utcnow)
-    update_time = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    create_time = db.Column(db.DateTime, default=beijing_now)
+    update_time = db.Column(db.DateTime, default=beijing_now, onupdate=datetime.utcnow)
     
     # 关联
     products = db.relationship('Product', backref='category', lazy='dynamic')
@@ -127,12 +132,14 @@ class Product(db.Model):
     is_hot = db.Column(db.SmallInteger, default=0)
     is_new = db.Column(db.SmallInteger, default=0)
     is_recommend = db.Column(db.SmallInteger, default=0)
-    create_time = db.Column(db.DateTime, default=datetime.utcnow)
-    update_time = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    create_time = db.Column(db.DateTime, default=beijing_now)
+    update_time = db.Column(db.DateTime, default=beijing_now, onupdate=datetime.utcnow)
     exchange_points = db.Column(db.Integer, default=0)
+    has_sku = db.Column(db.SmallInteger, default=0)  # 0-无规格 1-有规格
     
     # 关联
     reviews = db.relationship('Review', backref='product', lazy='dynamic')
+    skus = db.relationship('ProductSku', backref='product', lazy='dynamic', cascade='all, delete-orphan')
     
     @property
     def available_stock(self):
@@ -157,7 +164,9 @@ class Product(db.Model):
             'is_hot': self.is_hot or 0,
             'is_new': self.is_new or 0,
             'is_recommend': self.is_recommend or 0,
-            'exchange_points': self.exchange_points or 0
+            'exchange_points': self.exchange_points or 0,
+            'has_sku': self.has_sku or 0,
+            'skus': [s.to_dict() for s in self.skus] if self.has_sku else []
         }
 
 
@@ -175,8 +184,8 @@ class Address(db.Model):
     detail_address = db.Column(db.String(255), nullable=False)
     postal_code = db.Column(db.String(20))
     is_default = db.Column(db.SmallInteger, default=0)
-    create_time = db.Column(db.DateTime, default=datetime.utcnow)
-    update_time = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    create_time = db.Column(db.DateTime, default=beijing_now)
+    update_time = db.Column(db.DateTime, default=beijing_now, onupdate=datetime.utcnow)
     
     def to_dict(self):
         # 安全获取字符串值，避免 None
@@ -221,10 +230,11 @@ class ShoppingCart(db.Model):
     cart_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(db.Integer, db.ForeignKey('t_user.user_id'), nullable=False)
     product_id = db.Column(db.Integer, db.ForeignKey('t_product.product_id'), nullable=False)
+    sku_id = db.Column(db.Integer, default=None)
     quantity = db.Column(db.Integer, nullable=False, default=1)
     selected = db.Column(db.SmallInteger, default=1)
-    create_time = db.Column(db.DateTime, default=datetime.utcnow)
-    update_time = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    create_time = db.Column(db.DateTime, default=beijing_now)
+    update_time = db.Column(db.DateTime, default=beijing_now, onupdate=datetime.utcnow)
     
     # 关联
     product = db.relationship('Product', backref='cart_items')
@@ -237,6 +247,7 @@ class ShoppingCart(db.Model):
         return {
             'cart_id': self.cart_id,
             'product': self.product.to_dict() if self.product else None,
+            'sku_id': self.sku_id,
             'quantity': self.quantity,
             'selected': self.selected
         }
@@ -259,7 +270,7 @@ class Coupon(db.Model):
     per_user_limit = db.Column(db.Integer, default=1)
     is_vip_only = db.Column(db.SmallInteger, default=0)
     status = db.Column(db.SmallInteger, default=1)
-    create_time = db.Column(db.DateTime, default=datetime.utcnow)
+    create_time = db.Column(db.DateTime, default=beijing_now)
     
     def to_dict(self):
         return {
@@ -285,7 +296,7 @@ class UserCoupon(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('t_user.user_id'), nullable=False)
     coupon_id = db.Column(db.Integer, db.ForeignKey('t_coupon.coupon_id'), nullable=False)
     status = db.Column(db.SmallInteger, default=0)  # 0-未使用 1-已使用 2-已过期
-    receive_time = db.Column(db.DateTime, default=datetime.utcnow)
+    receive_time = db.Column(db.DateTime, default=beijing_now)
     use_time = db.Column(db.DateTime)
     order_id = db.Column(db.BigInteger)
     
@@ -340,8 +351,8 @@ class Order(db.Model):
     buyer_note = db.Column(db.String(255))
     seller_note = db.Column(db.String(255))
     
-    create_time = db.Column(db.DateTime, default=datetime.utcnow)
-    update_time = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    create_time = db.Column(db.DateTime, default=beijing_now)
+    update_time = db.Column(db.DateTime, default=beijing_now, onupdate=datetime.utcnow)
     
     # 关联
     items = db.relationship('OrderItem', backref='order', lazy='dynamic', cascade='all, delete-orphan')
@@ -352,7 +363,8 @@ class Order(db.Model):
         2: '已发货',
         3: '已完成',
         4: '已取消',
-        5: '已退款'
+        5: '已退款',
+        6: '退款处理中'
     }
     
     def to_dict(self):
@@ -423,7 +435,7 @@ class Review(db.Model):
     status = db.Column(db.SmallInteger, default=1)  # 0-待审核 1-已发布 2-已屏蔽
     admin_reply = db.Column(db.Text)
     reply_time = db.Column(db.DateTime)
-    create_time = db.Column(db.DateTime, default=datetime.utcnow)
+    create_time = db.Column(db.DateTime, default=beijing_now)
     
     def to_dict(self):
         return {
@@ -454,7 +466,7 @@ class PointsLog(db.Model):
     source = db.Column(db.String(50))
     source_id = db.Column(db.String(100))
     description = db.Column(db.String(255))
-    create_time = db.Column(db.DateTime, default=datetime.utcnow)
+    create_time = db.Column(db.DateTime, default=beijing_now)
     
     def to_dict(self):
         return {
@@ -486,4 +498,187 @@ class OperationLog(db.Model):
     result = db.Column(db.SmallInteger, default=1)  # 0-失败 1-成功
     error_msg = db.Column(db.Text)
     execute_time = db.Column(db.Integer)  # 毫秒
-    create_time = db.Column(db.DateTime, default=datetime.utcnow)
+    create_time = db.Column(db.DateTime, default=beijing_now)
+
+
+class Tag(db.Model):
+    __tablename__ = 't_tag'
+
+    tag_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    name = db.Column(db.String(50), nullable=False, unique=True)
+    create_time = db.Column(db.DateTime, default=beijing_now)
+
+    def to_dict(self):
+        return {
+            'tag_id': self.tag_id,
+            'name': self.name
+        }
+
+
+class ProductTag(db.Model):
+    __tablename__ = 't_product_tag'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('t_product.product_id'), nullable=False)
+    tag_id = db.Column(db.Integer, db.ForeignKey('t_tag.tag_id'), nullable=False)
+
+    tag = db.relationship('Tag')
+
+    __table_args__ = (
+        db.UniqueConstraint('product_id', 'tag_id', name='uk_product_tag'),
+    )
+
+
+class SpecTemplate(db.Model):
+    __tablename__ = 't_spec_template'
+
+    template_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    name = db.Column(db.String(50), nullable=False)
+    create_time = db.Column(db.DateTime, default=beijing_now)
+
+    values = db.relationship('SpecValue', backref='template', lazy='dynamic', cascade='all, delete-orphan')
+
+    def to_dict(self):
+        return {
+            'template_id': self.template_id,
+            'name': self.name,
+            'values': [v.to_dict() for v in self.values]
+        }
+
+
+class SpecValue(db.Model):
+    __tablename__ = 't_spec_value'
+
+    value_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    template_id = db.Column(db.Integer, db.ForeignKey('t_spec_template.template_id'), nullable=False)
+    value = db.Column(db.String(50), nullable=False)
+    sort_order = db.Column(db.Integer, default=0)
+    create_time = db.Column(db.DateTime, default=beijing_now)
+
+    def to_dict(self):
+        return {
+            'value_id': self.value_id,
+            'template_id': self.template_id,
+            'value': self.value,
+            'sort_order': self.sort_order
+        }
+
+
+class ProductSku(db.Model):
+    __tablename__ = 't_product_sku'
+
+    sku_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('t_product.product_id'), nullable=False)
+    spec_ids = db.Column(db.String(500), nullable=False)
+    spec_text = db.Column(db.String(200))
+    price = db.Column(db.Numeric(10, 2))
+    stock = db.Column(db.Integer, nullable=False, default=0)
+    locked_stock = db.Column(db.Integer, default=0)
+    original_price = db.Column(db.Numeric(10, 2))
+    vip_price = db.Column(db.Numeric(10, 2))
+    image = db.Column(db.String(255))
+    status = db.Column(db.SmallInteger, default=1)
+    create_time = db.Column(db.DateTime, default=beijing_now)
+
+    @property
+    def available_stock(self):
+        return (self.stock or 0) - (self.locked_stock or 0)
+
+    def to_dict(self):
+        return {
+            'sku_id': self.sku_id,
+            'product_id': self.product_id,
+            'spec_ids': self.spec_ids,
+            'spec_text': self.spec_text,
+            'price': float(self.price) if self.price else None,
+            'original_price': float(self.original_price) if self.original_price else None,
+            'vip_price': float(self.vip_price) if self.vip_price else None,
+            'stock': self.stock or 0,
+            'available_stock': self.available_stock,
+            'locked_stock': self.locked_stock or 0,
+            'image': self.image,
+            'status': self.status
+        }
+
+
+class SeckillSession(db.Model):
+    __tablename__ = 't_seckill_session'
+    session_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    name = db.Column(db.String(100), nullable=False)
+    start_time = db.Column(db.DateTime, nullable=False)
+    end_time = db.Column(db.DateTime, nullable=False)
+    status = db.Column(db.SmallInteger, default=1)
+    create_time = db.Column(db.DateTime, default=beijing_now)
+    products = db.relationship('SeckillProduct', backref='session', lazy='dynamic', cascade='all, delete-orphan')
+
+    def to_dict(self):
+        return {
+            'session_id': self.session_id, 'name': self.name,
+            'start_time': self.start_time.isoformat() if self.start_time else None,
+            'end_time': self.end_time.isoformat() if self.end_time else None,
+            'status': self.status
+        }
+
+
+class SeckillProduct(db.Model):
+    __tablename__ = 't_seckill_product'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    session_id = db.Column(db.Integer, db.ForeignKey('t_seckill_session.session_id'), nullable=False)
+    product_id = db.Column(db.Integer, db.ForeignKey('t_product.product_id'), nullable=False)
+    seckill_price = db.Column(db.Numeric(10,2), nullable=False)
+    seckill_stock = db.Column(db.Integer, nullable=False, default=0)
+    limit_per_user = db.Column(db.Integer, default=1)
+    version = db.Column(db.Integer, default=0)
+    create_time = db.Column(db.DateTime, default=beijing_now)
+    product = db.relationship('Product')
+
+    def to_dict(self):
+        result = {
+            'id': self.id, 'session_id': self.session_id, 'product_id': self.product_id,
+            'seckill_price': float(self.seckill_price), 'seckill_stock': self.seckill_stock,
+            'limit_per_user': self.limit_per_user
+        }
+        if self.product:
+            result['product'] = self.product.to_dict()
+        return result
+
+
+class Notification(db.Model):
+    __tablename__ = 't_notification'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    title = db.Column(db.String(200), nullable=False)
+    content = db.Column(db.Text)
+    type = db.Column(db.SmallInteger, nullable=False, default=1)
+    user_id = db.Column(db.Integer, db.ForeignKey('t_user.user_id'))
+    is_read = db.Column(db.SmallInteger, default=0)
+    create_time = db.Column(db.DateTime, default=beijing_now)
+
+    def to_dict(self):
+        return {
+            'id': self.id, 'title': self.title, 'content': self.content,
+            'type': self.type, 'user_id': self.user_id,
+            'is_read': self.is_read,
+            'create_time': self.create_time.isoformat() if self.create_time else None
+        }
+
+
+class Refund(db.Model):
+    __tablename__ = 't_refund'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    order_id = db.Column(db.BigInteger, db.ForeignKey('t_order.order_id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('t_user.user_id'), nullable=False)
+    reason = db.Column(db.String(500), nullable=False)
+    status = db.Column(db.SmallInteger, default=0)
+    admin_id = db.Column(db.Integer)
+    remark = db.Column(db.String(500))
+    create_time = db.Column(db.DateTime, default=beijing_now)
+    update_time = db.Column(db.DateTime, default=beijing_now, onupdate=datetime.utcnow)
+    order = db.relationship('Order', backref='refund_record', uselist=False)
+
+    def to_dict(self):
+        return {
+            'id': self.id, 'order_id': str(self.order_id), 'user_id': self.user_id,
+            'reason': self.reason, 'status': self.status,
+            'admin_id': self.admin_id, 'remark': self.remark,
+            'create_time': self.create_time.isoformat() if self.create_time else None
+        }

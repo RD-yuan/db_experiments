@@ -1,4 +1,4 @@
-"""
+﻿"""
 Flask application factory.
 """
 from flask import Flask
@@ -50,6 +50,9 @@ def create_app(config_name='default'):
     from app.routes.coupon import coupon_bp
     from app.routes.review import review_bp
     from app.routes.admin import admin_bp
+    from app.routes.seckill import seckill_bp
+    from app.routes.notification import notif_bp
+    from app.routes.spec import spec_bp
 
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(user_bp, url_prefix='/api/users')
@@ -60,6 +63,9 @@ def create_app(config_name='default'):
     app.register_blueprint(coupon_bp, url_prefix='/api/coupons')
     app.register_blueprint(review_bp, url_prefix='/api/reviews')
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
+    app.register_blueprint(spec_bp, url_prefix='/api')
+    app.register_blueprint(seckill_bp, url_prefix='/api')
+    app.register_blueprint(notif_bp, url_prefix='/api')
 
     @app.route('/')
     def index():

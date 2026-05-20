@@ -1,4 +1,4 @@
-"""
+﻿"""
 购物车路由
 """
 from flask import Blueprint, request, g
@@ -35,7 +35,12 @@ def get_cart():
     
     for item in cart_items:
         if item.product and item.selected:
-            total_amount += float(item.product.price) * item.quantity
+            if item.sku_id:
+                from app.models.models import ProductSku
+                sku = db.session.get(ProductSku, item.sku_id)
+                total_amount += float(sku.price if sku and sku.price else item.product.price) * item.quantity
+            else:
+                total_amount += float(item.product.price) * item.quantity
             selected_count += item.quantity
         total_count += item.quantity
     

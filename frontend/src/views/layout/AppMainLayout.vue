@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="layout">
     <el-header class="header">
       <router-link class="logo" to="/home">电商平台</router-link>
@@ -16,11 +16,15 @@
           <el-badge :value="cartCount" :hidden="cartCount === 0">购物车</el-badge>
         </router-link>
         <router-link to="/orders">我的订单</router-link>
+        <router-link to="/seckill">限时秒杀</router-link>
         <router-link to="/coupon-center">领券中心</router-link>
       </nav>
 
       <!-- 已登录用户区域 -->
       <div v-if="userStore.isLoggedIn" class="user-actions">
+        <el-badge :value="unreadCount" :hidden="unreadCount===0" style="margin-right:16px;cursor:pointer" @click="router.push('/notifications')">
+          <el-icon :size="20"><Bell /></el-icon>
+        </el-badge>
         <el-dropdown>
           <span class="user-name">{{ userStore.user?.username || userStore.user?.phone || '已登录用户' }}</span>
           <template #dropdown>
@@ -57,14 +61,19 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
+import { api } from '@/api'
 
 const router = useRouter()
 const userStore = useUserStore()
 const cartCount = ref(0)
+const unreadCount = ref(0)
+
+const loadUnread = async () => { try { if (userStore.isLoggedIn) { const r = await api.notification.getUnreadCount(); if (r) userStore.setUnreadCount(r.count) } } catch(e){console.error(e)} }
+onMounted(loadUnread)
 
 const handleLogout = async () => {
   await userStore.logout()

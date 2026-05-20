@@ -1,10 +1,8 @@
-"""
-认证路由 - 注册、登录
-"""
-from flask import Blueprint, request, jsonify
+﻿from flask import Blueprint, request, jsonify
 from flasgger import swag_from
 from app import db
 from app.models.models import User
+from app.utils.coupon_grant import grant_new_user_coupon
 from app.utils.helpers import (
     hash_password, verify_password, generate_token,
     success_response, error_response
@@ -12,6 +10,8 @@ from app.utils.helpers import (
 from app.utils.validators import (
     is_valid_email, is_valid_phone, normalize_email, normalize_optional_text
 )
+
+auth_bp = Blueprint('auth', __name__)
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -92,6 +92,12 @@ def register():
         # 生成 Token
         token = generate_token(user.user_id)
         
+        # Grant new-user coupon (non-blocking)
+        try:
+            grant_new_user_coupon(user.user_id)
+        except Exception:
+            pass
+        
         return success_response({
             'user': user.to_dict(),
             'token': token
@@ -100,7 +106,6 @@ def register():
     except Exception as e:
         db.session.rollback()
         return error_response(f'注册失败: {str(e)}')
-
 
 @auth_bp.route('/login', methods=['POST'])
 @swag_from({

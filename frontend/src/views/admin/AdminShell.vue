@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="admin-layout">
     <el-container>
       <el-aside width="220px">
@@ -20,6 +20,9 @@
             <el-icon><Document /></el-icon>
             <span>订单管理</span>
           </el-menu-item>
+          <el-menu-item index="/admin/refunds"><el-icon><Coin /></el-icon><span>退货管理</span></el-menu-item>
+          <el-menu-item index="/admin/seckill"><el-icon><Timer /></el-icon><span>秒杀管理</span></el-menu-item>
+          <el-menu-item index="/admin/notifications"><el-icon><Bell /></el-icon><span>消息管理</span></el-menu-item>
           <el-menu-item index="/admin/coupons">
             <el-icon><Ticket /></el-icon>
             <span>优惠券管理</span>

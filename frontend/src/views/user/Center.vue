@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="user-center">
     <el-row :gutter="20">
       <!-- 左侧菜单 -->
@@ -21,6 +21,7 @@
               <el-icon><Ticket /></el-icon>
               <span>我的优惠券</span>
             </el-menu-item>
+            <el-menu-item index="/user/refunds"><el-icon><Clock /></el-icon><span>退货记录</span></el-menu-item>
             <el-menu-item index="/user/points-mall">
               <el-icon><Present /></el-icon>
               <span>积分商城</span>
