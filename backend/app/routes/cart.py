@@ -28,24 +28,46 @@ def get_cart():
         ShoppingCart.create_time.desc()
     ).all()
     
-    # 计算总价
+    # 计算总价（应用VIP价格和等级折扣）
+    user_id = g.current_user_id
+    from app.models.models import User as CartUser, ProductSku as CartSku
+    user = db.session.get(CartUser, user_id)
     total_amount = 0
     total_count = 0
     selected_count = 0
-    
+
+    items_data = []
     for item in cart_items:
         if item.product and item.selected:
+            p = item.product
+            normal_price = float(p.price or 0)
+            base = normal_price
             if item.sku_id:
-                from app.models.models import ProductSku
-                sku = db.session.get(ProductSku, item.sku_id)
-                total_amount += float(sku.price if sku and sku.price else item.product.price) * item.quantity
-            else:
-                total_amount += float(item.product.price) * item.quantity
+                sku = db.session.get(CartSku, item.sku_id)
+                if sku and sku.price:
+                    base = float(sku.price)
+            if user and user.has_active_vip():
+                if item.sku_id:
+                    sku = db.session.get(CartSku, item.sku_id)
+                    if sku and sku.vip_price and float(sku.vip_price) > 0 and float(sku.vip_price) < base:
+                        base = float(sku.vip_price)
+                elif p.vip_price and float(p.vip_price) > 0 and float(p.vip_price) < normal_price:
+                    base = float(p.vip_price)
+                from flask import current_app
+                benefits = current_app.config.get('VIP_BENEFITS', {}).get(user.vip_level, {})
+                rate = benefits.get('discount', 1.0)
+                base = base * rate
+            item_dict = item.to_dict()
+            item_dict['effective_price'] = round(base, 2)
+            items_data.append(item_dict)
+            total_amount += base * item.quantity
             selected_count += item.quantity
+        else:
+            items_data.append(item.to_dict())
         total_count += item.quantity
-    
+
     return success_response({
-        'items': [item.to_dict() for item in cart_items],
+        'items': items_data,
         'total_count': total_count,
         'selected_count': selected_count,
         'total_amount': round(total_amount, 2)

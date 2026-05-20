@@ -19,9 +19,12 @@
             </div>
             
             <div class="product-info">
-              <h3 @click="goToProduct(item.product.product_id)">{{ item.product.name }}</h3>
+              <h3 @click="goToProduct(item.product.product_id)">
+                {{ item.product.name }}
+                <span v-if="item.sku_spec_text" class="sku-spec">{{ item.sku_spec_text }}</span>
+              </h3>
               <div class="product-price">
-                <span class="current">¥{{ getEffectivePrice(item.product).toFixed(2) }}</span>
+                <span class="current">¥{{ getEffectivePrice(item).toFixed(2) }}</span>
                 <span class="original" v-if="hasActiveVip && hasProductVipPrice(item.product)">
                   ¥{{ Number(item.product.price || 0).toFixed(2) }}
                 </span>
@@ -41,7 +44,7 @@
             </div>
             
             <div class="subtotal">
-              ¥{{ (getEffectivePrice(item.product) * item.quantity).toFixed(2) }}
+              ¥{{ (getEffectivePrice(item) * item.quantity).toFixed(2) }}
             </div>
             
             <div class="actions">
@@ -98,17 +101,34 @@ const hasActiveVip = computed(() => {
   return new Date(user.vip_expire_time).getTime() > Date.now()
 })
 
+const vipDiscountFactor = computed(() => {
+  const level = userStore.user?.vip_level || 0
+  const factors = { 1: 1.0, 2: 0.95, 3: 0.9 }
+  return factors[level] || 1.0
+})
+
 const hasProductVipPrice = (product) => {
   const vipPrice = Number(product?.vip_price || 0)
   const price = Number(product?.price || 0)
   return vipPrice > 0 && vipPrice < price
 }
 
-const getEffectivePrice = (product) => {
-  if (hasActiveVip.value && hasProductVipPrice(product)) {
-    return Number(product.vip_price)
+const getEffectivePrice = (item) => {
+  // 后端已算好 effective_price，直接用
+  if (item?.effective_price !== undefined && item?.effective_price !== null) {
+    return Number(item.effective_price)
   }
-  return Number(product?.price || 0)
+  // Fallback（兼容无 effective_price 的情况）
+  const product = item?.product || item
+  let base = Number(item?.sku_price || product?.price || 0)
+  if (hasActiveVip.value) {
+    const skuVip = Number(item?.sku_vip_price || 0)
+    const productVip = Number(product?.vip_price || 0)
+    if (skuVip > 0 && skuVip < base) base = skuVip
+    else if (productVip > 0 && productVip < Number(product?.price || 0)) base = productVip
+    base = base * vipDiscountFactor.value
+  }
+  return base
 }
 
 const selectedCount = computed(() => {
@@ -117,7 +137,7 @@ const selectedCount = computed(() => {
 
 const selectedAmount = computed(() => {
   return cartItems.value.filter(item => item.selected).reduce((sum, item) => {
-    return sum + getEffectivePrice(item.product) * item.quantity
+    return sum + getEffectivePrice(item) * item.quantity
   }, 0)
 })
 
@@ -241,9 +261,15 @@ onMounted(() => {
       font-size: 16px;
       margin-bottom: 10px;
       cursor: pointer;
-      
+
       &:hover {
         color: #ff6700;
+      }
+
+      .sku-spec {
+        color: #999;
+        font-size: 12px;
+        margin-left: 8px;
       }
     }
     

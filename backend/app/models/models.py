@@ -240,19 +240,28 @@ class ShoppingCart(db.Model):
     
     # 关联
     product = db.relationship('Product', backref='cart_items')
-    
+    sku = db.relationship('ProductSku', foreign_keys=[sku_id], primaryjoin='ShoppingCart.sku_id == ProductSku.sku_id', lazy='select')
+
     __table_args__ = (
         db.UniqueConstraint('user_id', 'product_id', 'sku_id', name='uk_user_product_sku'),
     )
-    
+
     def to_dict(self):
-        return {
+        result = {
             'cart_id': self.cart_id,
             'product': self.product.to_dict() if self.product else None,
             'sku_id': self.sku_id,
             'quantity': self.quantity,
             'selected': self.selected
         }
+        if self.sku:
+            if self.sku.spec_text:
+                result['sku_spec_text'] = self.sku.spec_text
+            if self.sku.price is not None:
+                result['sku_price'] = float(self.sku.price)
+            if self.sku.vip_price is not None:
+                result['sku_vip_price'] = float(self.sku.vip_price)
+        return result
 
 
 class Coupon(db.Model):
@@ -336,7 +345,7 @@ class Order(db.Model):
     status = db.Column(db.SmallInteger, default=0)  # 0-待支付 1-已支付 2-已发货 3-已完成 4-已取消 5-已退款
     
     # 支付信息
-    payment_method = db.Column(db.SmallInteger)  # 1-微信 2-支付宝 3-余额
+    payment_method = db.Column(db.SmallInteger)  # 3-余额 4-积分兑换
     payment_time = db.Column(db.DateTime)
     transaction_id = db.Column(db.String(100))
     
@@ -400,25 +409,31 @@ class OrderItem(db.Model):
     product_id = db.Column(db.Integer, db.ForeignKey('t_product.product_id'), nullable=False)
     product_name = db.Column(db.String(200), nullable=False)
     product_image = db.Column(db.String(255))
+    sku_id = db.Column(db.Integer, default=None)
     price = db.Column(db.Numeric(10, 2), nullable=False)
     quantity = db.Column(db.Integer, nullable=False)
     subtotal = db.Column(db.Numeric(10, 2), nullable=False)
     is_reviewed = db.Column(db.SmallInteger, default=0)
-    
+
     # 关联
     product = db.relationship('Product')
-    
+    sku = db.relationship('ProductSku', foreign_keys=[sku_id], primaryjoin='OrderItem.sku_id == ProductSku.sku_id', lazy='select')
+
     def to_dict(self):
-        return {
+        result = {
             'order_item_id': self.order_item_id,
             'product_id': self.product_id,
             'product_name': self.product_name,
             'product_image': self.product_image,
+            'sku_id': self.sku_id,
             'price': float(self.price),
             'quantity': self.quantity,
             'subtotal': float(self.subtotal),
             'is_reviewed': self.is_reviewed
         }
+        if self.sku and self.sku.spec_text:
+            result['sku_spec_text'] = self.sku.spec_text
+        return result
 
 
 class Review(db.Model):

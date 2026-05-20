@@ -32,7 +32,10 @@
           <div v-for="item in order.items" :key="item.order_item_id" class="order-item">
             <el-image :src="item.product_image" fit="contain" class="product-image" />
             <div class="product-info">
-              <h4>{{ item.product_name }}</h4>
+              <h4>
+                {{ item.product_name }}
+                <span v-if="item.sku_spec_text" style="color: #999; font-size: 12px">{{ item.sku_spec_text }}</span>
+              </h4>
               <p>¥{{ item.price }} x {{ item.quantity }}</p>
             </div>
             <div class="subtotal">¥{{ item.subtotal }}</div>

@@ -461,9 +461,25 @@ def purchase_vip():
 
         # 更新VIP信息
         if active_vip:
-            user.vip_expire_time = user.vip_expire_time + timedelta(days=months * 30)
-            user.vip_level = level
-            user.is_vip = 1
+            if level == current_level:
+                # 同等级：叠加时长
+                user.vip_expire_time = user.vip_expire_time + timedelta(days=months * 30)
+            else:
+                # 升级：按价格比例折算剩余低等级时长
+                level_prices = {}
+                for p in packages:
+                    level_prices.setdefault(p['level'], p['price'] / p['months'])
+                old_monthly = Decimal(str(level_prices.get(current_level, 0)))
+                new_monthly = Decimal(str(level_prices.get(level, 0)))
+                remaining_days = max(0, (user.vip_expire_time - now).days)
+                remaining_months = Decimal(str(remaining_days)) / Decimal('30')
+                if old_monthly > 0 and new_monthly > 0:
+                    converted_months = remaining_months * old_monthly / new_monthly
+                else:
+                    converted_months = Decimal('0')
+                total_months = converted_months + Decimal(str(months))
+                user.vip_level = level
+                user.vip_expire_time = now + timedelta(days=int(total_months * 30))
         else:
             # 新开通或已过期
             user.is_vip = 1

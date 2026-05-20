@@ -29,13 +29,13 @@
             <div class="product-info">
               <h4>{{ item.product.name }}</h4>
               <span>
-                ¥{{ getEffectivePrice(item.product).toFixed(2) }} x {{ item.quantity }}
+                ¥{{ getEffectivePrice(item).toFixed(2) }} x {{ item.quantity }}
                 <em v-if="hasActiveVip && hasProductVipPrice(item.product)">
                   会员价已生效，原价 ¥{{ Number(item.product.price || 0).toFixed(2) }}
                 </em>
               </span>
             </div>
-            <div class="item-total">¥{{ (getEffectivePrice(item.product) * item.quantity).toFixed(2) }}</div>
+            <div class="item-total">¥{{ (getEffectivePrice(item) * item.quantity).toFixed(2) }}</div>
           </div>
         </div>
       </div>
@@ -164,6 +164,12 @@ export default {
       return new Date(user.vip_expire_time).getTime() > Date.now()
     })
 
+    const vipDiscountFactor = computed(() => {
+      const level = userStore.user?.vip_level || 0
+      const factors = { 1: 1.0, 2: 0.95, 3: 0.9 }
+      return factors[level] || 1.0
+    })
+
     const hasProductVipPrice = (product) => {
       const vipPrice = Number(product?.vip_price || 0)
       const price = Number(product?.price || 0)
@@ -175,11 +181,20 @@ export default {
       return dayjs(date).format('YYYY-MM-DD')
     }
 
-    const getEffectivePrice = (product) => {
-      if (hasActiveVip.value && hasProductVipPrice(product)) {
-        return Number(product.vip_price)
+    const getEffectivePrice = (item) => {
+      if (item?.effective_price !== undefined && item?.effective_price !== null) {
+        return Number(item.effective_price)
       }
-      return Number(product?.price || 0)
+      const product = item?.product || item
+      let base = Number(item?.sku_price || product?.price || 0)
+      if (hasActiveVip.value) {
+        const skuVip = Number(item?.sku_vip_price || 0)
+        const productVip = Number(product?.vip_price || 0)
+        if (skuVip > 0 && skuVip < base) base = skuVip
+        else if (productVip > 0 && productVip < Number(product?.price || 0)) base = productVip
+        base = base * vipDiscountFactor.value
+      }
+      return base
     }
 
     // ========== 优惠券相关 ==========
@@ -289,12 +304,12 @@ export default {
     // 计算总金额
     const totalAmount = computed(() => {
       return orderItems.value.reduce((sum, item) => {
-        return sum + getEffectivePrice(item.product) * item.quantity
+        return sum + getEffectivePrice(item) * item.quantity
       }, 0)
     })
 
-    // 运费规则：满99包邮，否则10元
-    const freight = computed(() => totalAmount.value >= 99 ? 0 : 10)
+    // 运费规则：满300包邮，否则12元
+    const freight = computed(() => totalAmount.value >= 300 ? 0 : 12)
 
     // 提交订单
     const submitOrder = async () => {

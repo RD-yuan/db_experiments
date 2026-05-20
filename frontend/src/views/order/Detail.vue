@@ -24,7 +24,12 @@
 
       <h3 style="margin-top: 20px">商品列表</h3>
       <el-table :data="order.items" style="width: 100%">
-        <el-table-column prop="product_name" label="商品名称" />
+        <el-table-column label="商品名称">
+          <template #default="{ row }">
+            {{ row.product_name }}
+            <span v-if="row.sku_spec_text" style="color: #999; font-size: 12px">{{ row.sku_spec_text }}</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="price" label="单价" width="120">
           <template #default="{ row }">¥{{ row.price }}</template>
         </el-table-column>

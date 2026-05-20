@@ -18,7 +18,7 @@
         </el-table-column>
         <el-table-column label="优惠值" width="120">
           <template #default="{ row }">
-            {{ row.type === 2 ? row.value * 10 + '折' : '¥' + row.value }}
+            {{ row.type === 2 ? (row.value * 10).toFixed(1) + '折' : '¥' + row.value }}
           </template>
         </el-table-column>
         <el-table-column prop="min_order_amount" label="最低消费" width="120">
@@ -30,6 +30,11 @@
             <el-tag :type="row.status === 1 ? 'success' : 'info'">
               {{ row.status === 1 ? '启用' : '禁用' }}
             </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="有效期" width="200">
+          <template #default="{ row }">
+            {{ formatTime(row.start_time) }} ~ {{ formatTime(row.end_time) }}
           </template>
         </el-table-column>
         <el-table-column label="操作" width="150">
@@ -93,6 +98,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '@/api'
+import dayjs from 'dayjs'
 
 const loading = ref(false)
 const tableData = ref([])
@@ -115,21 +121,19 @@ const form = ref({
 
 const dialogTitle = computed(() => isEdit.value ? '编辑优惠券' : '创建优惠券')
 
+const formatTime = (t) => {
+  if (!t) return '-'
+  return dayjs(t).format('YYYY-MM-DD HH:mm')
+}
+
 const loadCoupons = async () => {
   loading.value = true
   try {
-    // 注意：后端可能需要实现 GET /api/admin/coupons 接口
-    // 如果未实现，可暂时调用普通优惠券接口或模拟数据
-    const res = await api.coupon.getAvailable()
-    tableData.value = res || []
-    total.value = res.length || 0
+    const res = await api.admin.getCoupons({ page: page.value, per_page: perPage.value })
+    tableData.value = res.items || []
+    total.value = res.total || 0
   } catch (error) {
     console.error('加载优惠券失败:', error)
-    // 临时使用模拟数据展示效果
-    tableData.value = [
-      { coupon_id: 1, name: '新人专享券', type: 3, value: 20, min_order_amount: 100, received_count: 156, status: 1 },
-      { coupon_id: 2, name: '满200减30', type: 1, value: 30, min_order_amount: 200, received_count: 89, status: 1 }
-    ]
   } finally {
     loading.value = false
   }
@@ -153,30 +157,41 @@ const handleAdd = () => {
 const handleEdit = (row) => {
   isEdit.value = true
   currentId.value = row.coupon_id
-  form.value = { ...row }
+  form.value = {
+    name: row.name || '',
+    type: row.type,
+    value: row.value,
+    min_order_amount: row.min_order_amount || 0,
+    total_quantity: row.total_quantity,
+    start_time: row.start_time,
+    end_time: row.end_time
+  }
   dialogVisible.value = true
 }
 
 const handleDelete = async (row) => {
   try {
     await ElMessageBox.confirm(`确定要删除优惠券 "${row.name}" 吗？`, '提示')
-    // 后端需实现 DELETE /api/admin/coupons/{id}
+    await api.admin.deleteCoupon(row.coupon_id)
     ElMessage.success('删除成功')
     loadCoupons()
   } catch (error) {
-    if (error !== 'cancel') {
-      console.error('删除失败:', error)
-    }
+    if (error !== 'cancel') console.error('删除失败:', error)
   }
 }
 
 const submitForm = async () => {
+  const payload = { ...form.value }
+  // 确保时间字段为 ISO 字符串
+  if (payload.start_time) payload.start_time = dayjs(payload.start_time).format('YYYY-MM-DDTHH:mm:ss')
+  if (payload.end_time) payload.end_time = dayjs(payload.end_time).format('YYYY-MM-DDTHH:mm:ss')
+
   try {
     if (isEdit.value) {
-      // await api.admin.updateCoupon(currentId.value, form.value)
+      await api.admin.updateCoupon(currentId.value, payload)
       ElMessage.success('更新成功')
     } else {
-      // await api.admin.createCoupon(form.value)
+      await api.admin.createCoupon(payload)
       ElMessage.success('创建成功')
     }
     dialogVisible.value = false

@@ -4,7 +4,8 @@ from datetime import datetime, timedelta
 from sqlalchemy import func
 from decimal import Decimal
 from app import db
-from app.models.models import User, Product, Category, Order, OperationLog, OrderItem, PointsLog, ShoppingCart, Review
+from app.models.models import User, Product, Category, Order, OperationLog, OrderItem, PointsLog, ShoppingCart, Review, Coupon, UserCoupon, ProductSku
+from app.routes.seckill import _restore_seckill_stock
 from app.utils.helpers import (
     success_response, error_response, admin_required, paginate
 )
@@ -297,14 +298,28 @@ def off_shelf_product(product_id):
                 for item in order_items:
                     item_product = item.product
                     if item_product:
-                        item_product.stock = (item_product.stock or 0) + item.quantity
+                        if item.sku_id:
+                            sku = db.session.get(ProductSku, item.sku_id)
+                            if sku:
+                                sku.stock = (sku.stock or 0) + item.quantity
+                            all_skus = ProductSku.query.filter_by(product_id=item_product.product_id).all()
+                            item_product.stock = sum((s.stock or 0) for s in all_skus)
+                        else:
+                            item_product.stock = (item_product.stock or 0) + item.quantity
                         item_product.sold_count = max(0, (item_product.sold_count or 0) - item.quantity)
 
             else:  # 待支付订单释放锁定库存
                 for item in order_items:
                     item_product = item.product
                     if item_product:
-                        item_product.locked_stock = max(0, (item_product.locked_stock or 0) - item.quantity)
+                        if item.sku_id:
+                            sku = db.session.get(ProductSku, item.sku_id)
+                            if sku:
+                                sku.locked_stock = max(0, (sku.locked_stock or 0) - item.quantity)
+                            all_skus = ProductSku.query.filter_by(product_id=item_product.product_id).all()
+                            item_product.locked_stock = sum(max(0, (s.locked_stock or 0)) for s in all_skus)
+                        else:
+                            item_product.locked_stock = max(0, (item_product.locked_stock or 0) - item.quantity)
 
             order.status = 4  # 已取消
             order.update_time = datetime.now()
@@ -397,7 +412,7 @@ def order_source():
         Order.payment_method, func.count(Order.order_id)
     ).filter(Order.payment_method.isnot(None), Order.status.in_([1,2,3])
     ).group_by(Order.payment_method).all()
-    mapping = {1: '微信', 2: '支付宝', 3: '余额', 4: '积分兑换'}
+    mapping = {3: '余额', 4: '积分兑换'}
     return success_response([{'name': mapping.get(r[0], '其他'), 'value': r[1]} for r in rows])
 
 
@@ -515,13 +530,18 @@ def process_refund(refund_id):
             for item in order.items:
                 product = item.product
                 if product:
-                    product.stock = (product.stock or 0) + item.quantity
-                    product.sold_count = max(0, (product.sold_count or 0) - item.quantity)
-                    if product.has_sku:
+                    if item.sku_id:
                         from app.models.models import ProductSku as PSku
-                        skus = PSku.query.filter_by(product_id=product.product_id).all()
-                        for sc in skus:
-                            sc.locked_stock = max(0, (sc.locked_stock or 0) - item.quantity)
+                        sku = db.session.get(PSku, item.sku_id)
+                        if sku:
+                            sku.stock = (sku.stock or 0) + item.quantity
+                        all_skus = PSku.query.filter_by(product_id=product.product_id).all()
+                        product.stock = sum((s.stock or 0) for s in all_skus)
+                    else:
+                        product.stock = (product.stock or 0) + item.quantity
+                    product.sold_count = max(0, (product.sold_count or 0) - item.quantity)
+
+            _restore_seckill_stock(order)
 
             # Send approval notification
             from app.models.models import Notification
@@ -598,3 +618,76 @@ def delete_seckill_product(sp_id):
         db.session.delete(sp)
         db.session.commit()
     return success_response(message='已删除')
+
+
+# ============ 优惠券管理 ============
+
+@admin_bp.route('/coupons', methods=['GET'])
+@admin_required
+def admin_list_coupons():
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    query = Coupon.query.order_by(Coupon.create_time.desc())
+    return success_response(paginate(query, page, per_page))
+
+
+@admin_bp.route('/coupons', methods=['POST'])
+@admin_required
+def admin_create_coupon():
+    data = request.get_json() or {}
+    name = (data.get('name') or '').strip()
+    if not name:
+        return error_response('名称不能为空')
+    try:
+        coupon = Coupon(
+            name=name,
+            type=data.get('type', 1),
+            value=data.get('value', 0),
+            min_order_amount=data.get('min_order_amount', 0),
+            total_quantity=data.get('total_quantity'),
+            start_time=datetime.fromisoformat(data['start_time']) if data.get('start_time') else datetime.now(),
+            end_time=datetime.fromisoformat(data['end_time']) if data.get('end_time') else datetime.now(),
+        )
+        db.session.add(coupon)
+        db.session.commit()
+        return success_response(coupon.to_dict(), '创建成功')
+    except Exception as e:
+        db.session.rollback()
+        return error_response(f'创建失败: {str(e)}')
+
+
+@admin_bp.route('/coupons/<int:coupon_id>', methods=['PUT'])
+@admin_required
+def admin_update_coupon(coupon_id):
+    coupon = db.session.get(Coupon, coupon_id)
+    if not coupon:
+        return error_response('优惠券不存在', 404)
+    data = request.get_json() or {}
+    for field in ['name', 'type', 'value', 'min_order_amount', 'total_quantity', 'status', 'start_time', 'end_time']:
+        if field in data:
+            val = data[field]
+            if field in ('start_time', 'end_time') and val and isinstance(val, str):
+                val = datetime.fromisoformat(val)
+            setattr(coupon, field, val)
+    try:
+        db.session.commit()
+        return success_response(coupon.to_dict(), '更新成功')
+    except Exception as e:
+        db.session.rollback()
+        return error_response(f'更新失败: {str(e)}')
+
+
+@admin_bp.route('/coupons/<int:coupon_id>', methods=['DELETE'])
+@admin_required
+def admin_delete_coupon(coupon_id):
+    coupon = db.session.get(Coupon, coupon_id)
+    if not coupon:
+        return error_response('优惠券不存在', 404)
+    try:
+        UserCoupon.query.filter_by(coupon_id=coupon_id).delete()
+        db.session.delete(coupon)
+        db.session.commit()
+        return success_response(message='删除成功')
+    except Exception as e:
+        db.session.rollback()
+        return error_response(f'删除失败: {str(e)}')

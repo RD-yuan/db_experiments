@@ -1,4 +1,4 @@
-﻿'''
+'''
 Seckill routes.
 '''
 from flask import Blueprint, request, g
@@ -66,6 +66,19 @@ def get_current():
         'products': [sp.to_dict() for sp in products]
     })
 
+
+def _restore_seckill_stock(order):
+    """Restore seckill stock when a seckill order is canceled or refunded."""
+    for item in order.items:
+        sp = SeckillProduct.query.join(SeckillSession).filter(
+            SeckillProduct.product_id == item.product_id,
+            SeckillSession.start_time <= order.create_time,
+            SeckillSession.end_time >= order.create_time
+        ).first()
+        if sp:
+            sp.seckill_stock = (sp.seckill_stock or 0) + item.quantity
+
+
 @seckill_bp.route('/seckill/orders', methods=['POST'])
 @token_required
 def create_seckill_order():
@@ -73,6 +86,7 @@ def create_seckill_order():
     sp_id = data.get('seckill_product_id')
     quantity = int(data.get('quantity', 1))
     address_id = data.get('address_id')
+    sku_id = data.get('sku_id')
     if quantity <= 0: return error_response('数量无效')
 
     user = db.session.get(User, g.current_user_id)
@@ -88,6 +102,19 @@ def create_seckill_order():
 
     if sp.seckill_stock < quantity:
         return error_response('秒杀库存不足')
+
+    product = sp.product
+    # SKU 校验
+    sku = None
+    if sku_id:
+        sku = db.session.get(ProductSku, sku_id)
+        if not sku or sku.product_id != product.product_id:
+            return error_response('规格不存在')
+        if (sku.stock or 0) < quantity:
+            return error_response('该规格库存不足')
+    elif not product.has_sku:
+        if (product.stock or 0) < quantity:
+            return error_response('库存不足')
 
     # Check per-user limit
     existing = Order.query.join(OrderItem).filter(
@@ -106,17 +133,6 @@ def create_seckill_order():
         sp.seckill_stock -= quantity
         sp.version += 1
 
-        # Also reduce product stock
-        product = sp.product
-        if product:
-            product.stock = max(0, (product.stock or 0) - quantity)
-            product.sold_count = (product.sold_count or 0) + quantity
-        product.sold_count = (product.sold_count or 0) + quantity
-        if product and product.has_sku:
-            skus = ProductSku.query.filter_by(product_id=product.product_id).all()
-            for sc in skus:
-                sc.locked_stock = max(0, (sc.locked_stock or 0) - quantity)
-
         order_id = generate_order_id()
         payment_amount = sp.seckill_price * quantity
         order = Order(
@@ -127,10 +143,10 @@ def create_seckill_order():
         db.session.add(order)
         db.session.flush()
 
-        sp_product = sp.product
         item = OrderItem(
-            order_id=order_id, product_id=sp_product.product_id,
-            product_name=sp_product.name, product_image=sp_product.main_image,
+            order_id=order_id, product_id=product.product_id,
+            product_name=product.name, product_image=product.main_image,
+            sku_id=sku.sku_id if sku else None,
             price=sp.seckill_price, quantity=quantity, subtotal=payment_amount
         )
         db.session.add(item)

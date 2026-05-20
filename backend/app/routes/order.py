@@ -1,5 +1,6 @@
 ﻿from decimal import Decimal
 import json
+from app.routes.seckill import _restore_seckill_stock
 from datetime import datetime
 
 from flask import Blueprint, request, g, current_app
@@ -194,8 +195,17 @@ def create_order():
         elif item.product.available_stock < item.quantity:
             return error_response(f'商品 {item.product.name} 库存不足')
 
-        if sku and sku.price:
-            price = sku.price
+        if sku:
+            # SKU VIP 定价：VIP且有SKU会员价 → SKU会员价，否则SKU普通价
+            sku_base = sku.price or item.product.price
+            if user and user.has_active_vip():
+                sku_vip = sku.vip_price
+                if sku_vip and sku_vip > 0 and sku_vip < sku_base:
+                    sku_base = sku_vip
+                benefits = current_app.config.get('VIP_BENEFITS', {}).get(user.vip_level, {})
+                rate = benefits.get('discount', 1.0)
+                sku_base = sku_base * Decimal(str(rate))
+            price = sku_base
         else:
             price = _get_effective_product_price(item.product, user)
         subtotal = price * item.quantity
@@ -255,7 +265,7 @@ def create_order():
             return error_response(f'积分抵扣金额不能超过 ¥{max_points_discount:.2f}')
         points_used = int(points_discount * 100)
 
-    freight_amount = Decimal('0.00') if total_amount >= Decimal('99.00') else Decimal('10.00')
+    freight_amount = Decimal('0.00') if total_amount >= Decimal('300.00') else Decimal('12.00')
     payment_amount = max(
         Decimal('0.00'),
         total_amount + freight_amount - discount_amount - points_discount
@@ -285,6 +295,7 @@ def create_order():
                 product_id=item_data['product_id'],
                 product_name=item_data['product_name'],
                 product_image=item_data['product_image'],
+                sku_id=item_data['sku'].sku_id if item_data.get('sku') else None,
                 price=item_data['price'],
                 quantity=item_data['quantity'],
                 subtotal=item_data['subtotal']
@@ -342,14 +353,20 @@ def cancel_order(order_id):
     try:
         for item in order.items:
             product = item.product
-            if product:
-                product.locked_stock -= item.quantity
-            if product.has_sku:
-                sku_list = ProductSku.query.filter_by(product_id=product.product_id).all()
-                for sc in sku_list:
-                    sc.locked_stock = max(0, (sc.locked_stock or 0) - item.quantity)
+            if not product:
+                continue
+            if item.sku_id:
+                sku = db.session.get(ProductSku, item.sku_id)
+                if sku:
+                    sku.locked_stock = max(0, (sku.locked_stock or 0) - item.quantity)
+                # 同步 product locked_stock
+                all_skus = ProductSku.query.filter_by(product_id=product.product_id).all()
+                product.locked_stock = sum(max(0, (s.locked_stock or 0)) for s in all_skus)
+            else:
+                product.locked_stock = max(0, (product.locked_stock or 0) - item.quantity)
 
         order.status = 4
+        _restore_seckill_stock(order)
 
         if order.points_used > 0:
             user = order.user
@@ -405,20 +422,26 @@ def pay_order(order_id):
 
         for item in order.items:
             product = item.product
-            if product:
-                if product.stock < item.quantity:
+            if not product:
+                continue
+            # SKU 商品：更新对应 SKU 的库存
+            if item.sku_id:
+                sku = db.session.get(ProductSku, item.sku_id)
+                if sku:
+                    if (sku.stock or 0) < item.quantity:
+                        raise Exception(f'商品 {product.name} - {sku.spec_text} 库存不足')
+                    sku.stock = (sku.stock or 0) - item.quantity
+                    sku.locked_stock = max(0, (sku.locked_stock or 0) - item.quantity)
+                # 同步 product 库存 = 所有 SKU 库存之和
+                all_skus = ProductSku.query.filter_by(product_id=product.product_id).all()
+                product.stock = sum((s.stock or 0) for s in all_skus)
+                product.locked_stock = sum((s.locked_stock or 0) for s in all_skus)
+            else:
+                if (product.stock or 0) < item.quantity:
                     raise Exception(f'商品 {product.name} 库存不足')
-                product.stock -= item.quantity
-                product.locked_stock -= item.quantity
-            if product.has_sku:
-                sku_list = ProductSku.query.filter_by(product_id=product.product_id).all()
-                for sc in sku_list:
-                    sc.locked_stock = max(0, (sc.locked_stock or 0) - item.quantity)
-                product.sold_count += item.quantity
-                if product.has_sku:
-                    sku_candidates = ProductSku.query.filter_by(product_id=product.product_id).all()
-                    for sc in sku_candidates:
-                        sc.locked_stock = max(0, (sc.locked_stock or 0) - item.quantity)
+                product.stock = (product.stock or 0) - item.quantity
+                product.locked_stock = max(0, (product.locked_stock or 0) - item.quantity)
+            product.sold_count = (product.sold_count or 0) + item.quantity
 
         order.status = 1
         order.payment_method = 3

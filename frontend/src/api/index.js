@@ -205,6 +205,10 @@ const api = {
     getTags: () => request.get('/api/tags'),
     createTag: (data) => request.post('/api/tags', data),
     createNotification: (data) => request.post("/api/admin/notifications", data),
+    getCoupons: (params) => request.get('/api/admin/coupons', { params }),
+    createCoupon: (data) => request.post('/api/admin/coupons', data),
+    updateCoupon: (id, data) => request.put(`/api/admin/coupons/${id}`, data),
+    deleteCoupon: (id) => request.delete(`/api/admin/coupons/${id}`),
   }
 }
 
