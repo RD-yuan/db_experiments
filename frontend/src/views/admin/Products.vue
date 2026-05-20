@@ -152,6 +152,25 @@
           <el-checkbox v-model="form.is_new" :true-value="1" :false-value="0">新品</el-checkbox>
           <el-checkbox v-model="form.is_recommend" :true-value="1" :false-value="0">推荐</el-checkbox>
         </el-form-item>
+        <el-form-item label="自定义标签">
+          <el-select
+            v-model="formTagIds"
+            multiple
+            filterable
+            allow-create
+            default-first-option
+            placeholder="选择或输入标签名创建"
+            style="width: 100%"
+            @change="onTagSelectChange"
+          >
+            <el-option
+              v-for="tag in allTags"
+              :key="tag.tag_id"
+              :label="tag.name"
+              :value="tag.tag_id"
+            />
+          </el-select>
+        </el-form-item>
         <el-form-item label="描述">
           <el-input v-model="form.description" type="textarea" :rows="3" />
         </el-form-item>
@@ -334,6 +353,11 @@ const skuRows = ref([])
 const batchPrice = ref(null)
 const batchStock = ref(null)
 
+// ---- 标签管理 ----
+const allTags = ref([])
+const formTagIds = ref([])
+const tagNameCache = ref({})
+
 // ==================== 分类 ====================
 
 const buildCategoryMap = (tree) => {
@@ -375,6 +399,56 @@ const createCategory = async () => {
   } catch (error) { /* error handled by interceptor */ }
 }
 
+// ==================== 标签 ====================
+
+const loadTags = async () => {
+  try {
+    const res = await api.admin.getTags()
+    allTags.value = res || []
+    tagNameCache.value = {}
+    for (const t of allTags.value) {
+      tagNameCache.value[t.tag_id] = t.name
+    }
+  } catch (error) { console.error('加载标签失败:', error) }
+}
+
+const loadProductTags = async (productId) => {
+  if (!allTags.value.length) await loadTags()
+  try {
+    const tags = await api.product.getProductTags(productId)
+    // 确保产品已有标签都在 allTags 中
+    for (const t of (tags || [])) {
+      if (!tagNameCache.value[t.tag_id]) {
+        allTags.value.push({ tag_id: t.tag_id, name: t.name })
+        tagNameCache.value[t.tag_id] = t.name
+      }
+    }
+    formTagIds.value = (tags || []).map(t => t.tag_id)
+  } catch { formTagIds.value = [] }
+}
+
+const onTagSelectChange = async (vals) => {
+  // vals is an array of tag_ids (numbers) and possibly string names (from allow-create)
+  for (let i = 0; i < vals.length; i++) {
+    const val = vals[i]
+    if (typeof val === 'string') {
+      try {
+        const newTag = await api.admin.createTag({ name: val.trim() })
+        vals[i] = newTag.tag_id
+        allTags.value.push(newTag)
+        tagNameCache.value[newTag.tag_id] = newTag.name
+      } catch { /* skip if already exists */ }
+    }
+  }
+  formTagIds.value = vals.filter(v => typeof v !== 'string')
+}
+
+const saveProductTags = async (productId) => {
+  try {
+    await api.product.setProductTags(productId, { tag_ids: formTagIds.value })
+  } catch (error) { console.error('保存标签失败:', error) }
+}
+
 // ==================== 商品 ====================
 
 const loadProducts = async () => {
@@ -400,6 +474,7 @@ const handleAdd = () => {
     vip_price: null, stock: 0, exchange_points: 0, brand: '',
     is_hot: 0, is_new: 0, is_recommend: 0, description: ''
   }
+  formTagIds.value = []
   dialogVisible.value = true
 }
 
@@ -420,6 +495,7 @@ const handleEdit = (row) => {
     is_recommend: row.is_recommend || 0,
     description: row.description || ''
   }
+  loadProductTags(row.product_id)
   dialogVisible.value = true
 }
 
@@ -468,27 +544,30 @@ const submitForm = async () => {
     if (payload.vip_price === null) {
       payload.vip_price = 0
     }
+    let savedProductId = currentId.value
     if (isEdit.value) {
       await api.admin.updateProduct(currentId.value, payload)
       ElMessage.success('更新成功')
     } else {
       const res = await api.admin.createProduct(payload)
       ElMessage.success('添加成功')
-      // 新建成功后询问是否配置规格
-      dialogVisible.value = false
-      loadProducts()
-      if (res && res.product_id) {
-        try {
-          await ElMessageBox.confirm('商品已创建，是否立即配置商品规格（SKU）？', '提示', {
-            confirmButtonText: '去配置', cancelButtonText: '稍后', type: 'info'
-          })
-          openSkuDialog({ product_id: res.product_id })
-        } catch { /* 用户选择稍后 */ }
-      }
-      return
+      savedProductId = res?.product_id || null
+    }
+    // 保存标签
+    if (savedProductId) {
+      await saveProductTags(savedProductId)
     }
     dialogVisible.value = false
     loadProducts()
+    // 新建成功后询问是否配置规格
+    if (!isEdit.value && savedProductId) {
+      try {
+        await ElMessageBox.confirm('商品已创建，是否立即配置商品规格（SKU）？', '提示', {
+          confirmButtonText: '去配置', cancelButtonText: '稍后', type: 'info'
+        })
+        openSkuDialog({ product_id: savedProductId })
+      } catch { /* 用户选择稍后 */ }
+    }
   } catch (error) { console.error('提交失败:', error) }
 }
 
@@ -667,6 +746,7 @@ const saveSkus = async () => {
 
 onMounted(() => {
   loadCategories()
+  loadTags()
   loadProducts()
 })
 </script>

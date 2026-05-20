@@ -116,7 +116,9 @@ const api = {
     getNew: (limit = 10) => request.get('/api/products/new', { params: { limit } }),
     getExchangeList: (params) => request.get('/api/products/exchange', { params }),
     getSpecTemplates: () => request.get('/api/spec-templates'),
-    saveProductSkus: (id, data) => request.put(`/api/products/${id}/skus`, data)
+    saveProductSkus: (id, data) => request.put(`/api/products/${id}/skus`, data),
+    getProductTags: (id) => request.get(`/api/products/${id}/tags`),
+    setProductTags: (id, data) => request.put(`/api/products/${id}/tags`, data)
   },
 
   category: {
@@ -200,6 +202,8 @@ const api = {
     addSeckillProduct: (data) => request.post("/api/admin/seckill/products", data),
     deleteSeckillProduct: (id) => request.delete("/api/admin/seckill/products/" + id),
     getNotifications: (params) => request.get("/api/admin/notifications", { params }),
+    getTags: () => request.get('/api/tags'),
+    createTag: (data) => request.post('/api/tags', data),
     createNotification: (data) => request.post("/api/admin/notifications", data),
   }
 }

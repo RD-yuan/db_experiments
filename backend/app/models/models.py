@@ -140,6 +140,7 @@ class Product(db.Model):
     # 关联
     reviews = db.relationship('Review', backref='product', lazy='dynamic')
     skus = db.relationship('ProductSku', backref='product', lazy='dynamic', cascade='all, delete-orphan')
+    tag_links = db.relationship('ProductTag', backref='product', lazy='dynamic', cascade='all, delete-orphan')
     
     @property
     def available_stock(self):
@@ -166,6 +167,7 @@ class Product(db.Model):
             'is_recommend': self.is_recommend or 0,
             'exchange_points': self.exchange_points or 0,
             'has_sku': self.has_sku or 0,
+            'tags': [{'tag_id': tl.tag_id, 'name': tl.tag.name} for tl in self.tag_links if tl.tag] if self.tag_links else [],
             'skus': [s.to_dict() for s in self.skus] if self.has_sku else []
         }
 
