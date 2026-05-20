@@ -91,7 +91,7 @@ const currentReviewId = ref(null)
 
 const reviewForm = ref({ rating: 5, comment: '', is_anonymous: false })
 
-const canRefund = computed(() => { if (!order.value || order.value.user_id !== userStore.user?.user_id) return false; if (order.value.status !== 3) return false; return true })
+const canRefund = computed(() => { if (!order.value || order.value.user_id !== userStore.user?.user_id) return false; if (order.value.status !== 1 && order.value.status !== 3) return false; return true })
 
 const statusType = computed(() => {
   const types = { 0: 'warning', 1: 'primary', 2: 'info', 3: 'success', 4: 'info', 5: 'danger', 6: 'warning' }

@@ -598,7 +598,7 @@ def create_exchange_order():
 def apply_refund(order_id):
     order = Order.query.filter_by(order_id=order_id, user_id=g.current_user_id).first()
     if not order: return error_response('订单不存在', 404)
-    if order.status != 3: return error_response('只能对已完成的订单申请退货')
+    if order.status not in (1, 3): return error_response('只能对已支付或已完成的订单申请退货')
 
     from app.models.models import Refund
     latest = Refund.query.filter_by(order_id=order_id).order_by(Refund.id.desc()).first()

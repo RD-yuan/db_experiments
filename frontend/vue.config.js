@@ -1,4 +1,4 @@
-const backendTarget = process.env.VUE_APP_PROXY_TARGET || 'http://127.0.0.1:5000'
+﻿const backendTarget = process.env.VUE_APP_PROXY_TARGET || 'http://127.0.0.1:5000'
 
 module.exports = {
   devServer: {
@@ -10,6 +10,10 @@ module.exports = {
         changeOrigin: true
       },
       '^/health': {
+        target: backendTarget,
+        changeOrigin: true
+      },
+      '^/static': {
         target: backendTarget,
         changeOrigin: true
       },

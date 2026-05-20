@@ -55,12 +55,11 @@ const load = async () => {
 
 const approve = async (row) => {
   try {
-    const { value: remark } = await ElMessageBox.prompt('备注（可选）', '同意退货', { confirmButtonText: '确定' })
-    await api.admin.processRefund(row.id, { status: 1, remark: remark || '' })
+    await api.admin.processRefund(row.id, { status: 1, remark: '' })
     ElMessage.success('已同意退货退款')
     load()
   } catch (e) {
-    if (e !== 'cancel') console.error(e)
+    load()
   }
 }
 

@@ -17,6 +17,26 @@ from app.utils.validators import (
 )
 
 user_bp = Blueprint('user', __name__)
+@user_bp.route('/avatar', methods=['POST'])
+@token_required
+def upload_avatar():
+    import os, uuid
+    file = request.files.get('file')
+    if not file:
+        return error_response('请选择文件')
+    ext = file.filename.rsplit('.', 1)[-1].lower()
+    if ext not in ('png', 'jpg', 'jpeg', 'gif', 'webp'):
+        return error_response('仅支持 png/jpg/jpeg/gif/webp')
+    filename = f"{uuid.uuid4().hex}.{ext}"
+    upload_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'static', 'uploads')
+    os.makedirs(upload_dir, exist_ok=True)
+    filepath = os.path.join(upload_dir, filename)
+    file.save(filepath)
+    url = f"/static/uploads/{filename}"
+    user = db.session.get(User, g.current_user_id)
+    user.avatar = url
+    db.session.commit()
+    return success_response({'url': url}, '上传成功')
 
 @user_bp.route('/profile', methods=['GET'])
 @token_required
@@ -68,6 +88,10 @@ def update_profile():
         return error_response('用户不存在', 404)
 
     data = request.get_json() or {}
+
+    # 更新头像
+    if 'avatar' in data:
+        user.avatar = data['avatar']
 
     # 更新用户名
     if 'username' in data:

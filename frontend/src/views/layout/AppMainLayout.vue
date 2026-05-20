@@ -26,7 +26,7 @@
           <el-icon :size="20"><Bell /></el-icon>
         </el-badge>
         <el-dropdown>
-          <span class="user-name">{{ userStore.user?.username || userStore.user?.phone || '已登录用户' }}</span>
+          <el-avatar :size="32" :src="userStore.user?.avatar" style="margin-right:8px"><el-icon><User /></el-icon></el-avatar><span class="user-name">{{ userStore.user?.username || userStore.user?.phone || '已登录用户' }}</span>
           <template #dropdown>
             <el-dropdown-menu>
               <!-- 管理员下拉菜单只有退出 -->

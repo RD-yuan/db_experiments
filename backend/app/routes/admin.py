@@ -438,25 +438,77 @@ def process_refund(refund_id):
     try:
         if status == 1:  # Approve
             order = refund.order
+            user = order.user
+            original_status = order.status if order.status != 6 else 3  # 记录原始状态
+
             order.status = 5  # Refunded
             order.refund_remark = remark
             refund.status = 1
             refund.admin_id = admin.user_id
             refund.remark = remark
 
+            # ---- POINTS CHECK FIRST ----
+            earned = 0
+            if order.payment_method != 4:
+                earned = int(float(order.payment_amount))
+                if user.has_active_vip():
+                    benefits = current_app.config.get('VIP_BENEFITS', {}).get(user.vip_level, {})
+                    rate = benefits.get('points_rate', 1.0)
+                    earned = int(float(order.payment_amount) * rate)
+
+            if earned > 0 and user.points < earned:
+                # Auto-reject: insufficient points
+                from app.models.models import Notification
+                refund.status = 2
+                refund.admin_id = admin.user_id
+                refund.remark = f'积分不足：需扣除{earned}积分，当前仅{user.points}'
+                order.status = 3 if order.receive_time else 1  # 恢复原状态
+                order.refund_remark = refund.remark
+                db.session.add(Notification(
+                    title='退货申请未通过',
+                    content=f'您的订单 {order.order_id} 退款需扣除 {earned} 赠送积分，但您当前仅剩 {user.points} 积分，无法退款。',
+                    type=2, user_id=user.user_id
+                ))
+                db.session.commit()
+                return error_response(message=f'积分不足无法退款：需扣除{earned}积分，当前仅{user.points}')
+
+            # ---- PROCEED WITH REFUND ----
+            # Return exchange points
+            if order.payment_method == 4:
+                log = PointsLog.query.filter_by(
+                    user_id=user.user_id, source='EXCHANGE', source_id=str(order.order_id)
+                ).first()
+                if log:
+                    user.points += log.amount
+                    db.session.add(PointsLog(
+                        user_id=user.user_id, type=1, amount=log.amount,
+                        balance_after=user.points, source='REFUND',
+                        source_id=str(order.order_id),
+                        description='退货退还兑换积分'
+                    ))
+
             # Refund balance
-            user = order.user
             refund_amount = order.payment_amount or Decimal('0.00')
             user.balance = (user.balance or Decimal('0.00')) + refund_amount
 
-            # Refund points
+            # Refund used points
             if order.points_used > 0:
                 user.points += order.points_used
                 db.session.add(PointsLog(
                     user_id=user.user_id, type=1, amount=order.points_used,
                     balance_after=user.points, source='REFUND',
                     source_id=str(order.order_id),
-                    description=f'退货退款退还积分'
+                    description='退货退款退还积分'
+                ))
+
+            # Deduct earned points
+            if earned > 0:
+                user.points -= earned
+                db.session.add(PointsLog(
+                    user_id=user.user_id, type=2, amount=earned,
+                    balance_after=user.points, source='REFUND',
+                    source_id=str(order.order_id),
+                    description='退货退款扣除赠送积分'
                 ))
 
             # Restore stock
@@ -471,21 +523,13 @@ def process_refund(refund_id):
                         for sc in skus:
                             sc.locked_stock = max(0, (sc.locked_stock or 0) - item.quantity)
 
-            # Deduct earned points (from payment reward)
-            earned = int(float(order.payment_amount))
-            if order.user.has_active_vip():
-                benefits = current_app.config.get('VIP_BENEFITS', {}).get(order.user.vip_level, {})
-                rate = benefits.get('points_rate', 1.0)
-                earned = int(float(order.payment_amount) * rate)
-            if earned > 0:
-                actual_deduct = min(earned, user.points)
-                user.points -= actual_deduct
-                db.session.add(PointsLog(
-                    user_id=user.user_id, type=2, amount=earned,
-                    balance_after=user.points, source='REFUND',
-                    source_id=str(order.order_id),
-                    description=f'退货退款扣除赠送积分({actual_deduct})'
-                ))
+            # Send approval notification
+            from app.models.models import Notification
+            db.session.add(Notification(
+                title='退货申请已通过',
+                content=f'您的订单 {order.order_id} 已退款。金额已退回余额。',
+                type=2, user_id=user.user_id
+            ))
 
             # Restore coupon
             from app.models.models import UserCoupon
@@ -494,12 +538,13 @@ def process_refund(refund_id):
                 uc.status = 0
                 uc.use_time = None
                 uc.order_id = None
+
         else:  # Reject
             refund.status = 2
             refund.admin_id = admin.user_id
             refund.remark = remark
             order = refund.order
-            order.status = 3  # 恢复已完成
+            order.status = 3 if order.receive_time else 1  # 恢复原状态（有收货时间为已完成，否则已支付）
             order.refund_remark = remark
 
                 # Send notification to user

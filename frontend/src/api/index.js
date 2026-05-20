@@ -105,7 +105,8 @@ const api = {
     getConsumptionStats: (params) => request.get('/api/users/consumption-stats', { params }),
     recharge: (data) => request.post('/api/users/recharge', data),
     getVipPackages: () => request.get('/api/users/vip/packages'),
-    purchaseVip: (data) => request.post('/api/users/vip/purchase', data)
+    purchaseVip: (data) => request.post('/api/users/vip/purchase', data),
+    uploadAvatar: (formData) => request.post('/api/users/avatar', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
   },
 
   product: {

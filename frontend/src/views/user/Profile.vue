@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="profile-page">
     <el-row :gutter="20">
       <el-col :xs="24" :md="14">
@@ -9,6 +9,20 @@
               <el-button type="primary" :loading="saving" @click="saveProfile">保存修改</el-button>
             </div>
           </template>
+
+          <div class="avatar-section">
+            <el-avatar :size="80" :src="profileForm.avatar">
+              <el-icon :size="40"><User /></el-icon>
+            </el-avatar>
+            <el-upload
+              :show-file-list="false"
+              :before-upload="handleAvatarUpload"
+              accept="image/png,image/jpeg,image/gif,image/webp"
+              style="margin-top:12px"
+            >
+              <el-button size="small" type="primary" :loading="uploading">更换头像</el-button>
+            </el-upload>
+          </div>
 
           <el-form ref="profileFormRef" :model="profileForm" :rules="profileRules" label-width="90px">
             <el-form-item label="用户名" prop="username">
@@ -133,6 +147,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '@/api'
 import { useUserStore } from '@/stores/user'
+import { getToken } from '@/utils/auth'
 
 const userStore = useUserStore()
 const loading = ref(false)
@@ -143,6 +158,7 @@ const profile = ref({})
 const profileFormRef = ref(null)
 
 const profileForm = reactive({
+  avatar: '',
   username: '',
   email: '',
   phone: '',
@@ -205,6 +221,7 @@ const formatMoney = (value) => Number(value || 0).toFixed(2)
 
 const syncForm = (data) => {
   profile.value = data || {}
+  profileForm.avatar = profile.value.avatar || ''
   profileForm.username = profile.value.username || ''
   profileForm.email = profile.value.email || ''
   profileForm.phone = profile.value.phone || ''
@@ -221,6 +238,27 @@ const loadProfile = async () => {
   } finally {
     loading.value = false
   }
+}
+
+const uploading = ref(false)
+const handleAvatarUpload = async (file) => {
+  uploading.value = true
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    const resp = await fetch('/api/users/avatar', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + getToken() },
+      body: formData
+    })
+    const data = await resp.json()
+    if (data.code === 200) {
+      profileForm.avatar = data.data.url
+      if (userStore.user) userStore.user.avatar = data.data.url
+      ElMessage.success('头像已更新')
+    }
+  } catch(e) { console.error(e) } finally { uploading.value = false }
+  return false
 }
 
 const saveProfile = async () => {

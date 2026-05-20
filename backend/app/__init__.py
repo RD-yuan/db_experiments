@@ -77,6 +77,13 @@ def create_app(config_name='default'):
             'database_health': '/health/db',
         }
 
+
+    from flask import send_from_directory
+    import os
+    @app.route('/static/uploads/<path:filename>')
+    def uploaded_file(filename):
+        upload_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'uploads')
+        return send_from_directory(upload_dir, filename)
     @app.route('/health')
     def health():
         return {'status': 'ok', 'message': 'Service is running'}

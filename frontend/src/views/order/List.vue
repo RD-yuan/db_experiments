@@ -171,7 +171,7 @@ const handleCancel = async (orderId) => {
   }
 }
 
-const canReturn = (order) => { return order.status === 3 }
+const canReturn = (order) => { return order.status === 1 || order.status === 3 }
 
 const handleRefundClick = async (order) => {
   try {
