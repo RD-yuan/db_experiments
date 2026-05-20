@@ -24,9 +24,28 @@
             <el-image :src="row.main_image" fit="cover" style="width: 50px; height: 50px" />
           </template>
         </el-table-column>
-        <el-table-column prop="name" label="商品名称" min-width="200" />
+        <el-table-column prop="name" label="商品名称" min-width="180" />
+        <el-table-column label="分类" width="100">
+          <template #default="{ row }">
+            {{ categoryNameMap[row.category_id] || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="标签" width="140">
+          <template #default="{ row }">
+            <el-tag v-if="row.is_hot" size="small" type="danger" style="margin-right: 4px">热销</el-tag>
+            <el-tag v-if="row.is_new" size="small" type="success" style="margin-right: 4px">新品</el-tag>
+            <el-tag v-if="row.is_recommend" size="small" type="warning">推荐</el-tag>
+            <span v-if="!row.is_hot && !row.is_new && !row.is_recommend">-</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="price" label="价格" width="100">
           <template #default="{ row }">¥{{ row.price }}</template>
+        </el-table-column>
+        <el-table-column prop="original_price" label="原价" width="100">
+          <template #default="{ row }">
+            <span v-if="row.original_price">¥{{ row.original_price }}</span>
+            <span v-else>-</span>
+          </template>
         </el-table-column>
         <el-table-column prop="vip_price" label="会员价" width="100">
           <template #default="{ row }">
@@ -34,23 +53,20 @@
             <span v-else>-</span>
           </template>
         </el-table-column>
-        <el-table-column prop="exchange_points" label="兑换积分" width="100">
-          <template #default="{ row }">
-            {{ row.exchange_points || 0 }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="stock" label="库存" width="80" />
-        <el-table-column prop="sold_count" label="销量" width="80" />
-        <el-table-column label="状态" width="80">
+        <el-table-column prop="exchange_points" label="兑换积分" width="100" />
+        <el-table-column prop="stock" label="库存" width="70" />
+        <el-table-column prop="sold_count" label="销量" width="70" />
+        <el-table-column label="状态" width="70">
           <template #default="{ row }">
             <el-tag :type="row.status === 1 ? 'success' : 'danger'" size="small">
               {{ row.status === 1 ? '上架' : '下架' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="260" fixed="right">
+        <el-table-column label="操作" width="310" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleEdit(row)">编辑</el-button>
+            <el-button size="small" type="primary" @click="openSkuDialog(row)">规格</el-button>
             <el-button
               v-if="row.status === 1"
               size="small"
@@ -72,7 +88,7 @@
               type="danger"
               @click="handleDelete(row)"
             >
-              永久删除
+              删除
             </el-button>
           </template>
         </el-table-column>
@@ -89,34 +105,52 @@
       </div>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="600px">
+    <!-- 商品编辑对话框 -->
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="650px">
       <el-form :model="form" label-width="100px">
         <el-form-item label="商品名称">
           <el-input v-model="form.name" />
         </el-form-item>
+        <el-form-item label="商品分类">
+          <div style="display: flex; gap: 8px; width: 100%">
+            <el-tree-select
+              v-model="form.category_id"
+              :data="categoryTree"
+              :props="{ label: 'name', value: 'category_id', children: 'children' }"
+              placeholder="请选择分类"
+              check-strictly
+              clearable
+              filterable
+              style="flex: 1"
+            />
+            <el-button @click="openCategoryDialog">新增分类</el-button>
+          </div>
+        </el-form-item>
         <el-form-item label="价格">
           <el-input-number v-model="form.price" :min="0" :precision="2" />
         </el-form-item>
+        <el-form-item v-if="isEdit" label="原价">
+          <el-input-number v-model="form.original_price" :min="0" :precision="2" />
+          <span class="form-tip">修改价格时留空则自动填充上次价格</span>
+        </el-form-item>
         <el-form-item label="会员价">
           <el-input-number v-model="form.vip_price" :min="0" :precision="2" />
-          <span class="form-tip">留空或设置为0表示不启用会员价</span>
+          <span class="form-tip">0 表示不启用会员价</span>
         </el-form-item>
         <el-form-item label="库存">
           <el-input-number v-model="form.stock" :min="0" />
         </el-form-item>
-        <!-- 兑换积分字段已正确放置在对话框表单内 -->
         <el-form-item label="兑换积分">
-          <el-input-number
-            v-model="form.exchange_points"
-            :min="0"
-            :step="100"
-            controls-position="right"
-            style="width: 200px"
-          />
-          <span class="form-tip">0 表示不可用积分兑换</span>
+          <el-input-number v-model="form.exchange_points" :min="0" :step="100" style="width: 200px" />
+          <span class="form-tip">0 表示不可兑换</span>
         </el-form-item>
         <el-form-item label="品牌">
           <el-input v-model="form.brand" />
+        </el-form-item>
+        <el-form-item label="商品标签">
+          <el-checkbox v-model="form.is_hot" :true-value="1" :false-value="0">热销</el-checkbox>
+          <el-checkbox v-model="form.is_new" :true-value="1" :false-value="0">新品</el-checkbox>
+          <el-checkbox v-model="form.is_recommend" :true-value="1" :false-value="0">推荐</el-checkbox>
         </el-form-item>
         <el-form-item label="描述">
           <el-input v-model="form.description" type="textarea" :rows="3" />
@@ -125,6 +159,126 @@
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" @click="submitForm">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 新建分类对话框 -->
+    <el-dialog v-model="categoryDialogVisible" title="新增分类" width="450px">
+      <el-form :model="newCategoryForm" label-width="80px">
+        <el-form-item label="分类名称">
+          <el-input v-model="newCategoryForm.name" placeholder="请输入分类名称" />
+        </el-form-item>
+        <el-form-item label="父级分类">
+          <el-tree-select
+            v-model="newCategoryForm.parent_id"
+            :data="categoryTree"
+            :props="{ label: 'name', value: 'category_id', children: 'children' }"
+            placeholder="不选则为一级分类"
+            check-strictly
+            clearable
+            style="width: 100%"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="categoryDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="createCategory">确认创建</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- SKU 规格管理对话框 -->
+    <el-dialog v-model="skuDialogVisible" title="规格管理" width="800px" @opened="initSkuDialog">
+      <div v-if="skuProductId">
+        <!-- 规格模板选择区 -->
+        <el-card shadow="never" style="margin-bottom: 16px">
+          <template #header><span style="font-weight: 600">选择规格模板</span></template>
+          <div style="display: flex; flex-wrap: wrap; gap: 16px">
+            <div v-for="tpl in specTemplates" :key="tpl.template_id" style="display: flex; align-items: center; gap: 8px">
+              <el-checkbox
+                :model-value="selectedTemplateIds.includes(tpl.template_id)"
+                @change="(val) => toggleTemplate(tpl.template_id, val)"
+              >
+                {{ tpl.name }}
+              </el-checkbox>
+              <el-select
+                v-if="selectedTemplateIds.includes(tpl.template_id)"
+                v-model="selectedSpecValues[tpl.template_id]"
+                multiple
+                placeholder="选择规格值"
+                size="small"
+                style="width: 200px"
+              >
+                <el-option
+                  v-for="sv in tpl.values"
+                  :key="sv.value_id"
+                  :label="sv.value"
+                  :value="sv.value_id"
+                />
+              </el-select>
+            </div>
+          </div>
+          <el-button
+            v-if="selectedTemplateIds.length > 0"
+            type="primary"
+            size="small"
+            style="margin-top: 12px"
+            @click="generateSkuCombinations"
+          >
+            生成规格组合
+          </el-button>
+        </el-card>
+
+        <!-- SKU 列表 -->
+        <el-card v-if="skuRows.length > 0" shadow="never">
+          <template #header>
+            <div style="display: flex; justify-content: space-between; align-items: center">
+              <span style="font-weight: 600">SKU 列表（{{ skuRows.length }} 条）</span>
+              <div style="display: flex; gap: 8px">
+                <el-input-number
+                  v-model="batchPrice"
+                  :min="0"
+                  :precision="2"
+                  placeholder="批量价格"
+                  size="small"
+                  style="width: 130px"
+                />
+                <el-button size="small" @click="applyBatchPrice">应用价格</el-button>
+                <el-input-number
+                  v-model="batchStock"
+                  :min="0"
+                  placeholder="批量库存"
+                  size="small"
+                  style="width: 130px"
+                />
+                <el-button size="small" @click="applyBatchStock">应用库存</el-button>
+              </div>
+            </div>
+          </template>
+          <el-table :data="skuRows" size="small" max-height="400">
+            <el-table-column label="规格" min-width="200">
+              <template #default="{ row }">{{ row.spec_text }}</template>
+            </el-table-column>
+            <el-table-column label="价格" width="150">
+              <template #default="{ row }">
+                <el-input-number v-model="row.price" :min="0" :precision="2" size="small" style="width: 130px" />
+              </template>
+            </el-table-column>
+            <el-table-column label="库存" width="130">
+              <template #default="{ row }">
+                <el-input-number v-model="row.stock" :min="0" size="small" style="width: 110px" />
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="60">
+              <template #default="{ $index }">
+                <el-button size="small" type="danger" text @click="skuRows.splice($index, 1)">删除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-card>
+      </div>
+      <template #footer>
+        <el-button @click="skuDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveSkus" :loading="skuSaving">保存规格</el-button>
       </template>
     </el-dialog>
   </div>
@@ -141,21 +295,87 @@ const page = ref(1)
 const perPage = ref(20)
 const total = ref(0)
 const keyword = ref('')
+const categoryTree = ref([])
+const categoryNameMap = ref({})
 
+// ---- 商品编辑 ----
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const currentId = ref(null)
 const form = ref({
   name: '',
+  category_id: null,
   price: 0,
+  original_price: null,
   vip_price: null,
   stock: 0,
   exchange_points: 0,
   brand: '',
+  is_hot: 0,
+  is_new: 0,
+  is_recommend: 0,
   description: ''
 })
 
 const dialogTitle = computed(() => isEdit.value ? '编辑商品' : '添加商品')
+
+// ---- 分类管理 ----
+const categoryDialogVisible = ref(false)
+const newCategoryForm = ref({ name: '', parent_id: null })
+
+// ---- SKU 管理 ----
+const skuDialogVisible = ref(false)
+const skuProductId = ref(null)
+const skuSaving = ref(false)
+const specTemplates = ref([])
+const selectedTemplateIds = ref([])
+const selectedSpecValues = ref({})
+const skuRows = ref([])
+const batchPrice = ref(null)
+const batchStock = ref(null)
+
+// ==================== 分类 ====================
+
+const buildCategoryMap = (tree) => {
+  for (const node of tree) {
+    categoryNameMap.value[node.category_id] = node.name
+    if (node.children && node.children.length > 0) {
+      buildCategoryMap(node.children)
+    }
+  }
+}
+
+const loadCategories = async () => {
+  try {
+    const res = await api.category.getList()
+    categoryTree.value = res || []
+    categoryNameMap.value = {}
+    buildCategoryMap(res || [])
+  } catch (error) {
+    console.error('加载分类失败:', error)
+  }
+}
+
+const openCategoryDialog = () => {
+  newCategoryForm.value = { name: '', parent_id: null }
+  categoryDialogVisible.value = true
+}
+
+const createCategory = async () => {
+  const name = (newCategoryForm.value.name || '').trim()
+  if (!name) { ElMessage.warning('请输入分类名称'); return }
+  try {
+    await api.admin.createCategory({
+      name,
+      parent_id: newCategoryForm.value.parent_id || 0
+    })
+    ElMessage.success('分类创建成功')
+    categoryDialogVisible.value = false
+    await loadCategories()
+  } catch (error) { /* error handled by interceptor */ }
+}
+
+// ==================== 商品 ====================
 
 const loadProducts = async () => {
   loading.value = true
@@ -170,22 +390,15 @@ const loadProducts = async () => {
   }
 }
 
-const handleSearch = () => {
-  page.value = 1
-  loadProducts()
-}
+const handleSearch = () => { page.value = 1; loadProducts() }
 
 const handleAdd = () => {
   isEdit.value = false
   currentId.value = null
   form.value = {
-    name: '',
-    price: 0,
-    vip_price: null,
-    stock: 0,
-    exchange_points: 0,
-    brand: '',
-    description: ''
+    name: '', category_id: null, price: 0, original_price: null,
+    vip_price: null, stock: 0, exchange_points: 0, brand: '',
+    is_hot: 0, is_new: 0, is_recommend: 0, description: ''
   }
   dialogVisible.value = true
 }
@@ -195,11 +408,16 @@ const handleEdit = (row) => {
   currentId.value = row.product_id
   form.value = {
     name: row.name || '',
+    category_id: row.category_id || null,
     price: row.price || 0,
-    vip_price: row.vip_price !== null ? row.vip_price : null,
+    original_price: row.original_price || null,
+    vip_price: row.vip_price !== null && row.vip_price !== undefined ? row.vip_price : null,
     stock: row.stock || 0,
     exchange_points: row.exchange_points || 0,
     brand: row.brand || '',
+    is_hot: row.is_hot || 0,
+    is_new: row.is_new || 0,
+    is_recommend: row.is_recommend || 0,
     description: row.description || ''
   }
   dialogVisible.value = true
@@ -208,9 +426,8 @@ const handleEdit = (row) => {
 const handleOffShelf = async (row) => {
   try {
     await ElMessageBox.confirm(
-      `下架商品“${row.name}”将自动取消所有包含该商品的未完成订单（已支付订单将退款）。确定继续吗？`,
-      '警告',
-      { type: 'warning' }
+      `下架商品"${row.name}"将自动取消所有包含该商品的未完成订单（已支付订单将退款）。确定继续吗？`,
+      '警告', { type: 'warning' }
     )
     await api.admin.offShelfProduct(row.product_id)
     ElMessage.success('商品已下架')
@@ -225,17 +442,14 @@ const handleOnShelf = async (row) => {
     await api.admin.updateProduct(row.product_id, { status: 1 })
     ElMessage.success('商品已上架')
     loadProducts()
-  } catch (error) {
-    console.error('上架失败:', error)
-  }
+  } catch (error) { console.error('上架失败:', error) }
 }
 
 const handleDelete = async (row) => {
   try {
     await ElMessageBox.confirm(
-      `永久删除商品“${row.name}”将无法恢复。如果该商品已有订单记录，则无法删除。确定继续吗？`,
-      '警告',
-      { type: 'error' }
+      `永久删除商品"${row.name}"将无法恢复。如果该商品已有订单记录，则无法删除。确定继续吗？`,
+      '警告', { type: 'error' }
     )
     await api.admin.deleteProductPermanently(row.product_id)
     ElMessage.success('商品已永久删除')
@@ -246,23 +460,215 @@ const handleDelete = async (row) => {
 }
 
 const submitForm = async () => {
-  console.log('提交的表单数据:', form.value)
   try {
+    const payload = { ...form.value }
+    if (!isEdit.value) {
+      delete payload.original_price
+    }
+    if (payload.vip_price === null) {
+      payload.vip_price = 0
+    }
     if (isEdit.value) {
-      await api.admin.updateProduct(currentId.value, form.value)
+      await api.admin.updateProduct(currentId.value, payload)
       ElMessage.success('更新成功')
     } else {
-      await api.admin.createProduct(form.value)
+      const res = await api.admin.createProduct(payload)
       ElMessage.success('添加成功')
+      // 新建成功后询问是否配置规格
+      dialogVisible.value = false
+      loadProducts()
+      if (res && res.product_id) {
+        try {
+          await ElMessageBox.confirm('商品已创建，是否立即配置商品规格（SKU）？', '提示', {
+            confirmButtonText: '去配置', cancelButtonText: '稍后', type: 'info'
+          })
+          openSkuDialog({ product_id: res.product_id })
+        } catch { /* 用户选择稍后 */ }
+      }
+      return
     }
     dialogVisible.value = false
     loadProducts()
-  } catch (error) {
-    console.error('提交失败:', error)
+  } catch (error) { console.error('提交失败:', error) }
+}
+
+// ==================== SKU 规格管理 ====================
+
+const loadSpecTemplates = async () => {
+  try {
+    const res = await api.product.getSpecTemplates()
+    specTemplates.value = res || []
+  } catch (error) { console.error('加载规格模板失败:', error) }
+}
+
+const openSkuDialog = async (row) => {
+  skuProductId.value = row.product_id
+  skuDialogVisible.value = true
+}
+
+const initSkuDialog = async () => {
+  selectedTemplateIds.value = []
+  selectedSpecValues.value = {}
+  skuRows.value = []
+  batchPrice.value = null
+  batchStock.value = null
+
+  await loadSpecTemplates()
+
+  // 加载已有 SKU
+  if (skuProductId.value) {
+    try {
+      const product = await api.product.getDetail(skuProductId.value)
+      if (product && product.skus && product.skus.length > 0) {
+        // 从已有 SKU 恢复规格选择
+        const allSpecIds = new Set()
+        for (const sku of product.skus) {
+          let ids = sku.spec_ids
+          if (typeof ids === 'string') {
+            try { ids = JSON.parse(ids) } catch { ids = [] }
+          }
+          if (Array.isArray(ids)) {
+            ids.forEach(id => allSpecIds.add(id))
+          }
+        }
+        // 找出涉及哪些模板
+        for (const tpl of specTemplates.value) {
+          const tplValueIds = new Set(tpl.values.map(v => v.value_id))
+          const matched = [...allSpecIds].filter(id => tplValueIds.has(id))
+          if (matched.length > 0) {
+            selectedTemplateIds.value.push(tpl.template_id)
+            selectedSpecValues.value[tpl.template_id] = matched
+          }
+        }
+        // 恢复 SKU 行
+        skuRows.value = product.skus.map(sku => {
+          let ids = sku.spec_ids
+          if (typeof ids === 'string') {
+            try { ids = JSON.parse(ids) } catch { ids = [] }
+          }
+          return {
+            spec_ids: Array.isArray(ids) ? ids : [],
+            spec_text: sku.spec_text || '',
+            price: sku.price || 0,
+            stock: sku.stock || 0
+          }
+        })
+      }
+    } catch (error) { console.error('加载商品 SKU 失败:', error) }
   }
 }
 
-onMounted(loadProducts)
+const toggleTemplate = (templateId, checked) => {
+  if (checked) {
+    if (!selectedTemplateIds.value.includes(templateId)) {
+      selectedTemplateIds.value.push(templateId)
+    }
+    if (!selectedSpecValues.value[templateId]) {
+      selectedSpecValues.value[templateId] = []
+    }
+  } else {
+    selectedTemplateIds.value = selectedTemplateIds.value.filter(id => id !== templateId)
+    delete selectedSpecValues.value[templateId]
+  }
+}
+
+const generateSkuCombinations = () => {
+  // 为每个选中的模板收集选中的规格值
+  const valueArrays = []
+  const valueInfos = [] // [{template_name, value_name, value_id}]
+  for (const tid of selectedTemplateIds.value) {
+    const tpl = specTemplates.value.find(t => t.template_id === tid)
+    if (!tpl) continue
+    const selectedIds = selectedSpecValues.value[tid] || []
+    if (selectedIds.length === 0) continue
+    const values = selectedIds.map(vid => {
+      const sv = tpl.values.find(v => v.value_id === vid)
+      return { template_name: tpl.name, value_name: sv ? sv.value : '', value_id: vid }
+    })
+    valueArrays.push(values)
+  }
+
+  if (valueArrays.length === 0) {
+    ElMessage.warning('请至少选择一个规格值')
+    return
+  }
+
+  // 笛卡尔积
+  const cartesian = (arrays) => {
+    if (arrays.length === 0) return [[]]
+    const [first, ...rest] = arrays
+    const restProduct = cartesian(rest)
+    const result = []
+    for (const item of first) {
+      for (const combo of restProduct) {
+        result.push([item, ...combo])
+      }
+    }
+    return result
+  }
+
+  const combinations = cartesian(valueArrays)
+
+  // 保留旧 SKU 中已有的价格库存（按 spec_ids 匹配）
+  const oldMap = new Map()
+  for (const row of skuRows.value) {
+    const key = JSON.stringify([...row.spec_ids].sort())
+    oldMap.set(key, { price: row.price, stock: row.stock })
+  }
+
+  skuRows.value = combinations.map(combo => {
+    const spec_ids = combo.map(c => c.value_id)
+    const spec_text = combo.map(c => `${c.template_name}:${c.value_name}`).join(' / ')
+    const key = JSON.stringify([...spec_ids].sort())
+    const old = oldMap.get(key)
+    return {
+      spec_ids,
+      spec_text,
+      price: old ? old.price : (form.value.price || 0),
+      stock: old ? old.stock : 0
+    }
+  })
+}
+
+const applyBatchPrice = () => {
+  if (batchPrice.value !== null && batchPrice.value !== undefined) {
+    for (const row of skuRows.value) {
+      row.price = batchPrice.value
+    }
+  }
+}
+
+const applyBatchStock = () => {
+  if (batchStock.value !== null && batchStock.value !== undefined) {
+    for (const row of skuRows.value) {
+      row.stock = batchStock.value
+    }
+  }
+}
+
+const saveSkus = async () => {
+  skuSaving.value = true
+  try {
+    await api.product.saveProductSkus(skuProductId.value, {
+      skus: skuRows.value.map(row => ({
+        spec_ids: row.spec_ids,
+        price: row.price,
+        stock: row.stock
+      }))
+    })
+    ElMessage.success('规格保存成功')
+    skuDialogVisible.value = false
+    loadProducts()
+  } catch (error) { console.error('保存规格失败:', error) }
+  finally { skuSaving.value = false }
+}
+
+// ==================== Init ====================
+
+onMounted(() => {
+  loadCategories()
+  loadProducts()
+})
 </script>
 
 <style scoped>

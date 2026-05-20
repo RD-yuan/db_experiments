@@ -115,7 +115,8 @@ const api = {
     getHot: (limit = 10) => request.get('/api/products/hot', { params: { limit } }),
     getNew: (limit = 10) => request.get('/api/products/new', { params: { limit } }),
     getExchangeList: (params) => request.get('/api/products/exchange', { params }),
-    getSpecTemplates: () => request.get('/api/spec-templates')
+    getSpecTemplates: () => request.get('/api/spec-templates'),
+    saveProductSkus: (id, data) => request.put(`/api/products/${id}/skus`, data)
   },
 
   category: {

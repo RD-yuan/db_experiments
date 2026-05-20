@@ -40,11 +40,18 @@ def save_product_skus(product_id):
             else:
                 spec_ids_str = str(spec_ids)
 
-            # Build spec text from spec values
+            # Build spec text from spec values with template names
             spec_values = SpecValue.query.filter(
                 SpecValue.value_id.in_(spec_ids if isinstance(spec_ids, list) else json.loads(spec_ids_str))
             ).all()
-            spec_text = ' / '.join(v.value for v in spec_values)
+            spec_text_parts = []
+            for v in spec_values:
+                tpl = db.session.get(SpecTemplate, v.template_id)
+                if tpl:
+                    spec_text_parts.append(f'{tpl.name}:{v.value}')
+                else:
+                    spec_text_parts.append(v.value)
+            spec_text = ' / '.join(spec_text_parts)
 
             sku = ProductSku(
                 product_id=product_id,
@@ -59,6 +66,7 @@ def save_product_skus(product_id):
             has_sku = 1
 
         product.has_sku = has_sku
+        product.stock = sum(s.get('stock', 0) for s in skus_data)
         db.session.commit()
         return success_response(message='SKU保存成功')
     except Exception as e:

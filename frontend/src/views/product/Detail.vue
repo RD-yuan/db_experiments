@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="product-detail" v-loading="loading">
     <!-- 商品信息 -->
     <div class="product-main">
@@ -12,14 +12,14 @@
           </div>
         </div>
       </div>
-      
+
       <div class="product-info">
         <h1 class="product-title">{{ product.name }}</h1>
-        
+
         <div class="product-subtitle" v-if="product.description">
           {{ product.description }}
         </div>
-        
+
         <div class="price-section">
           <div class="price-row">
             <span class="label">价格</span>
@@ -37,11 +37,13 @@
               {{ discountText }}，到手价 ¥{{ finalPrice }}
             </el-tag>
           </div>
-        </div><div class="info-row">
+        </div>
+
+        <div class="info-row">
           <span class="label">销量</span>
           <span>{{ product.sold_count || 0 }} 件</span>
         </div>
-        
+
         <div class="info-row">
           <span class="label">库存</span>
           <span :class="{ 'low-stock': (currentSku ? currentSku.available_stock : product.available_stock) < 10 }">
@@ -49,17 +51,23 @@
             <el-tag v-if="(currentSku ? currentSku.available_stock : product.available_stock) < 10" type="warning" size="small">库存紧张</el-tag>
           </span>
         </div>
-        
-        <div class="sku-section" v-if="product.has_sku && product.skus.length > 0">
+
+        <div class="sku-section" v-if="product.has_sku && product.skus && product.skus.length > 0">
           <div v-for="tpl in skuTemplates" :key="tpl.template_id" class="sku-group">
             <span class="label">{{ tpl.name }}</span>
             <div class="sku-options">
-              <el-button v-for="val in tpl.values" :key="val.value_id" :type="selectedSpecs[tpl.template_id] === val.value_id ? 'primary' : 'default'" size="small" @click="selectSpec(tpl.template_id, val.value_id)">{{ val.value }}</el-button>
+              <el-button
+                v-for="val in tpl.values"
+                :key="val.value_id"
+                :type="selectedSpecs[tpl.template_id] === val.value_id ? 'primary' : 'default'"
+                size="small"
+                @click="selectSpec(tpl.template_id, val.value_id)"
+              >{{ val.value }}</el-button>
             </div>
           </div>
         </div>
 
-<div class="quantity-section">
+        <div class="quantity-section">
           <span class="label">数量</span>
           <el-input-number
             v-model="quantity"
@@ -68,7 +76,7 @@
             size="large"
           />
         </div>
-        
+
         <div class="action-buttons">
           <el-button
             type="primary"
@@ -93,24 +101,23 @@
         </div>
       </div>
     </div>
-    
+
     <!-- 商品详情和评价 -->
     <el-tabs v-model="activeTab" class="detail-tabs">
       <el-tab-pane label="商品详情" name="detail">
         <div class="detail-content" v-html="product.description || '暂无详情'"></div>
       </el-tab-pane>
-      
+
       <el-tab-pane label="商品评价" name="reviews">
         <div class="reviews-section">
           <div class="rating-summary">
             <div class="avg-rating">
-
               <span class="rating-value">{{ reviewTotal > 0 ? avgRating : '-' }}</span>
               <el-rate v-if="reviewTotal > 0" v-model="avgRating" disabled show-score text-color="#ff9900" />
               <span class="review-count">{{ reviewTotal > 0 ? reviewTotal + ' 条评价' : '暂无评价' }}</span>
             </div>
           </div>
-          
+
           <div class="review-list">
             <div v-for="review in reviews" :key="review.review_id" class="review-item">
               <div class="review-header">
@@ -137,10 +144,10 @@
                 <span class="time">{{ formatDate(review.create_time) }}</span>
               </div>
             </div>
-            
+
             <el-empty v-if="reviews.length === 0" description="暂无评价" />
           </div>
-          
+
           <div class="pagination-wrapper" v-if="reviewTotal > 0">
             <el-pagination
               v-model:current-page="reviewPage"
@@ -193,27 +200,62 @@ const selectSpec = (templateId, valueId) => {
   currentSku.value = findMatchingSku()
 }
 
-const loadSkuTemplates = async () => {
-  if (!product.value.has_sku) return
-  try {
-    const templates = await api.product.getSpecTemplates()
-    if (!templates) return
-    const usedSpecIds = new Set()
-    product.value.skus.forEach(sku => {
-      let ids = sku.spec_ids
-      if (typeof ids === 'string') ids = JSON.parse(ids)
-      ids.forEach(id => usedSpecIds.add(id))
+const buildTemplatesFromSkuText = () => {
+  const groups = {}
+  product.value.skus.forEach(sku => {
+    const text = sku.spec_text || ''
+    const parts = text.split(' / ').filter(Boolean)
+    parts.forEach((part, idx) => {
+      const colonIdx = part.indexOf(':')
+      let tplName, valName
+      if (colonIdx > 0) {
+        tplName = part.substring(0, colonIdx)
+        valName = part.substring(colonIdx + 1)
+      } else {
+        tplName = '规格' + (idx + 1)
+        valName = part
+      }
+      if (!groups[tplName]) groups[tplName] = new Set()
+      groups[tplName].add(valName)
     })
-    skuTemplates.value = templates
-      .map(tpl => ({
-        ...tpl,
-        values: tpl.values.filter(v => usedSpecIds.has(v.value_id))
-      }))
-      .filter(tpl => tpl.values.length > 0)
-  } catch (e) { console.error(e) }
+  })
+  let fid = 90000
+  return Object.entries(groups).map(([name, values]) => ({
+    template_id: fid++,
+    name,
+    values: [...values].map(v => ({ value_id: fid++, value: v }))
+  }))
 }
-const activeTab = ref('detail')
 
+const loadSkuTemplates = async () => {
+  if (!product.value.has_sku || !product.value.skus || !product.value.skus.length) return
+  try {
+    let templates = await api.product.getSpecTemplates()
+    if (!templates || !templates.length) {
+      templates = buildTemplatesFromSkuText()
+    } else {
+      const usedSpecIds = new Set()
+      product.value.skus.forEach(sku => {
+        let ids = sku.spec_ids
+        if (typeof ids === 'string') ids = JSON.parse(ids)
+        if (ids) ids.forEach(id => usedSpecIds.add(id))
+      })
+      templates = templates
+        .map(tpl => ({
+          ...tpl,
+          values: tpl.values.filter(v => usedSpecIds.has(v.value_id))
+        }))
+        .filter(tpl => tpl.values.length > 0)
+      if (!templates.length) templates = buildTemplatesFromSkuText()
+    }
+    skuTemplates.value = templates
+  } catch (e) {
+    console.error(e)
+    skuTemplates.value = buildTemplatesFromSkuText()
+  }
+}
+
+const activeTab = ref('detail')
 const defaultImage = 'https://via.placeholder.com/400x400?text=Product'
 
 const discountFactor = computed(() => {
@@ -236,14 +278,10 @@ const effectiveBasePrice = computed(() => {
 })
 
 const finalPrice = computed(() => {
-  const baseForDiscount = computed(() => {
-  if (hasActiveVip.value && hasVipPrice.value) {
-    return skuVipPrice.value
-  }
-  return effectiveBasePrice.value
-})
-
-  return (baseForDiscount.value * discountFactor.value).toFixed(2)
+  const baseForDiscount = hasActiveVip.value && hasVipPrice.value
+    ? skuVipPrice.value
+    : effectiveBasePrice.value
+  return (baseForDiscount * discountFactor.value).toFixed(2)
 })
 
 // 评价相关
@@ -282,10 +320,6 @@ const skuOriginalPrice = computed(() => {
 
 const showOriginalPrice = computed(() => {
   return skuOriginalPrice.value > 0 && skuOriginalPrice.value > effectiveBasePrice.value
-})
-
-const showVipPrice = computed(() => {
-  return hasVipPrice.value && !currentSku.value
 })
 
 const skuVipPrice = computed(() => {
@@ -341,12 +375,16 @@ const addToCart = async () => {
     router.push('/login?redirect=' + route.fullPath)
     return
   }
-  
+
   try {
-    await api.cart.add({
+    const payload = {
       product_id: product.value.product_id,
       quantity: quantity.value
-    })
+    }
+    if (currentSku.value) {
+      payload.sku_id = currentSku.value.sku_id
+    }
+    await api.cart.add(payload)
     ElMessage.success('已加入购物车')
   } catch (error) {
     console.error('加入购物车失败:', error)
@@ -359,8 +397,7 @@ const buyNow = () => {
     router.push('/login?redirect=' + route.fullPath)
     return
   }
-  
-  // 先加入购物车,再跳转到购物车页
+
   addToCart().then(() => {
     router.push('/cart')
   })
@@ -399,7 +436,7 @@ onMounted(() => {
 .product-gallery {
   width: 450px;
   margin-right: 40px;
-  
+
   .main-image {
     width: 100%;
     height: 450px;
@@ -408,11 +445,11 @@ onMounted(() => {
     overflow: hidden;
     margin-bottom: 15px;
   }
-  
+
   .thumbnail-list {
     display: flex;
     gap: 10px;
-    
+
     .thumbnail-item {
       width: 80px;
       height: 80px;
@@ -420,7 +457,7 @@ onMounted(() => {
       border-radius: 4px;
       overflow: hidden;
       cursor: pointer;
-      
+
       &:hover {
         border-color: #ff6700;
       }
@@ -430,43 +467,43 @@ onMounted(() => {
 
 .product-info {
   flex: 1;
-  
+
   .product-title {
     font-size: 24px;
     font-weight: 600;
     margin-bottom: 15px;
     line-height: 1.4;
   }
-  
+
   .product-subtitle {
     color: #999;
     margin-bottom: 20px;
     font-size: 14px;
     line-height: 1.6;
   }
-  
+
   .price-section {
     background: #fff8f0;
     padding: 20px;
     border-radius: 8px;
     margin-bottom: 20px;
-    
+
     .price-row {
       display: flex;
       align-items: center;
       margin-bottom: 10px;
-      
+
       .label {
         width: 60px;
         color: #999;
       }
-      
+
       .current-price {
         font-size: 28px;
         font-weight: bold;
         color: #ff6700;
       }
-      
+
       .original-price {
         font-size: 16px;
         color: #999;
@@ -474,16 +511,16 @@ onMounted(() => {
         margin-left: 15px;
       }
     }
-    
+
     .vip-price-row {
       display: flex;
       align-items: center;
-      
+
       .label {
         width: 60px;
         color: #999;
       }
-      
+
       .vip-price {
         font-size: 22px;
         font-weight: bold;
@@ -491,23 +528,23 @@ onMounted(() => {
       }
     }
   }
-  
+
   .info-row {
     display: flex;
     align-items: center;
     padding: 15px 0;
     border-bottom: 1px solid #f0f0f0;
-    
+
     .label {
       width: 60px;
       color: #999;
     }
-    
+
     .low-stock {
       color: #f56c6c;
     }
   }
-  
+
   .sku-section {
     padding: 15px 0;
     border-bottom: 1px solid #f0f0f0;
@@ -520,23 +557,23 @@ onMounted(() => {
     display: flex;
     align-items: center;
     padding: 20px 0;
-    
+
     .label {
       width: 60px;
       color: #999;
     }
   }
-  
+
   .action-buttons {
     display: flex;
     gap: 15px;
     margin-top: 20px;
-    
+
     .el-button--primary {
       background-color: #ff6700;
       border-color: #ff6700;
       flex: 1;
-      
+
       &:hover {
         background-color: #ff8533;
         border-color: #ff8533;
@@ -549,7 +586,7 @@ onMounted(() => {
   background: #fff;
   padding: 20px;
   border-radius: 8px;
-  
+
   .detail-content {
     padding: 20px;
     line-height: 1.8;
@@ -563,68 +600,68 @@ onMounted(() => {
     background: #f9f9f9;
     border-radius: 8px;
     margin-bottom: 20px;
-    
+
     .avg-rating {
       display: flex;
       align-items: center;
-      
+
       .rating-value {
         font-size: 48px;
         font-weight: bold;
         color: #ff6700;
         margin-right: 15px;
       }
-      
+
       .review-count {
         margin-left: 15px;
         color: #999;
       }
     }
   }
-  
+
   .review-list {
     .review-item {
       padding: 20px 0;
       border-bottom: 1px solid #f0f0f0;
-      
+
       &:last-child {
         border-bottom: none;
       }
     }
-    
+
     .review-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
       margin-bottom: 15px;
-      
+
       .user-info {
         display: flex;
         align-items: center;
-        
+
         .username {
           margin-left: 10px;
           font-weight: 500;
         }
       }
     }
-    
+
     .review-content {
       p {
         line-height: 1.8;
         color: #666;
         margin-bottom: 15px;
       }
-      
+
       .review-images {
         display: flex;
         flex-wrap: wrap;
       }
     }
-    
+
     .review-footer {
       margin-top: 10px;
-      
+
       .time {
         font-size: 12px;
         color: #999;

@@ -95,7 +95,12 @@ def create_category():
         return error_response('分类名称不能为空')
     
     parent_id = data.get('parent_id', 0)
-    
+
+    # 检查同级分类是否已存在同名
+    existing = Category.query.filter_by(name=name, parent_id=parent_id).first()
+    if existing:
+        return error_response('该分类已存在')
+
     # 计算层级
     level = 1
     if parent_id > 0:

@@ -240,7 +240,7 @@ class ShoppingCart(db.Model):
     product = db.relationship('Product', backref='cart_items')
     
     __table_args__ = (
-        db.UniqueConstraint('user_id', 'product_id', name='uk_user_product'),
+        db.UniqueConstraint('user_id', 'product_id', 'sku_id', name='uk_user_product_sku'),
     )
     
     def to_dict(self):

@@ -1,6 +1,7 @@
 ﻿"""
 商品路由
 """
+from decimal import Decimal
 from flask import Blueprint, request, g
 from sqlalchemy import func, select
 from flasgger import swag_from
@@ -105,8 +106,8 @@ def get_products():
         avg_subq = (
             select(
                 Review.product_id,
-                func.coalesce(func.avg(Review.rating), 0),
-                func.count(Review.review_id).label('avg_rating')
+                func.coalesce(func.avg(Review.rating), 0).label('avg_rating'),
+                func.count(Review.review_id).label('review_count')
             )
             .where(Review.status == 1)
             .group_by(Review.product_id)
@@ -306,6 +307,15 @@ def update_product(product_id):
     if not product:
         return error_response('商品不存在', 404)
     data = request.get_json()
+
+    # 如果修改了价格且未显式设置 original_price，自动将旧价格写入 original_price
+    if 'price' in data:
+        new_price = Decimal(str(data['price']))
+        old_price = product.price
+        if data.get('original_price') is None and old_price is not None and new_price != old_price:
+            product.original_price = old_price
+            data.pop('original_price', None)  # 防止下方循环覆盖为 None
+
     for field in ['name', 'description', 'price', 'original_price', 'vip_price',
                   'stock', 'category_id', 'brand', 'main_image', 'sub_images',
                   'status', 'is_hot', 'is_new', 'is_recommend', 'exchange_points']:

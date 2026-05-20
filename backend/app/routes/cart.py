@@ -4,7 +4,7 @@
 from flask import Blueprint, request, g
 from flasgger import swag_from
 from app import db
-from app.models.models import ShoppingCart, Product
+from app.models.models import ShoppingCart, Product, ProductSku
 from app.utils.helpers import success_response, error_response, token_required
 
 cart_bp = Blueprint('cart', __name__)
@@ -80,46 +80,54 @@ def add_to_cart():
     """添加商品到购物车"""
     user_id = g.current_user_id
     data = request.get_json()
-    
+
     product_id = data.get('product_id')
+    sku_id = data.get('sku_id')
     quantity = data.get('quantity', 1)
-    
+
     if not product_id:
         return error_response('商品ID不能为空')
-    
+
     if quantity < 1:
         return error_response('数量必须大于0')
-    
+
     # 检查商品
     product = db.session.get(Product, product_id)
     if not product or product.status != 1:
         return error_response('商品不存在或已下架')
-    
-    if product.available_stock < quantity:
+
+    # 检查 SKU
+    sku = None
+    if sku_id:
+        sku = db.session.get(ProductSku, sku_id)
+        if not sku or sku.product_id != product_id:
+            return error_response('规格不存在')
+        if sku.available_stock < quantity:
+            return error_response('该规格库存不足')
+    elif product.available_stock < quantity:
         return error_response('库存不足')
-    
-    # 检查购物车是否已有该商品
+
+    # 检查购物车是否已有该商品（同一 sku_id）
     cart_item = ShoppingCart.query.filter_by(
-        user_id=user_id, product_id=product_id
+        user_id=user_id, product_id=product_id, sku_id=sku_id
     ).first()
-    
+
     try:
         if cart_item:
-            # 更新数量
             cart_item.quantity += quantity
             cart_item.selected = 1
         else:
-            # 新增
             cart_item = ShoppingCart(
                 user_id=user_id,
                 product_id=product_id,
+                sku_id=sku_id,
                 quantity=quantity
             )
             db.session.add(cart_item)
-        
+
         db.session.commit()
         return success_response(cart_item.to_dict(), '添加成功')
-    
+
     except Exception as e:
         db.session.rollback()
         return error_response(f'添加失败: {str(e)}')
