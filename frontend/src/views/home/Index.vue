@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="home-page">
     <div class="home-shell">
       <section class="hero-section">
@@ -133,10 +133,30 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { api } from '@/api'
 
 const router = useRouter()
+
+const tags = ['热卖', '新品', '精选', '好评']
+
+const loadHotProducts = async () => {
+  try {
+    const data = await api.product.getHot(4)
+    products.value = data.map((p, i) => ({
+      id: p.product_id,
+      name: p.name,
+      price: p.price,
+      tag: tags[i % tags.length],
+      caption: p.brand || '热销单品'
+    }))
+  } catch (e) {
+    console.error(e)
+  }
+}
+
+onMounted(loadHotProducts)
 
 const colors = [
   'linear-gradient(135deg, #c7f0ff 0%, #74b9ff 48%, #4f7dff 100%)',
