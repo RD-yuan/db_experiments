@@ -188,6 +188,7 @@ const api = {
     getProducts: (params) => request.get('/api/admin/products', { params }),
     createProduct: (data) => request.post('/api/products', data),
     updateProduct: (id, data) => request.put(`/api/products/${id}`, data),
+    uploadProductImage: (formData) => request.post('/api/products/upload-image', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
     deleteProduct: (id) => request.delete(`/api/products/${id}`),
     createCategory: (data) => request.post('/api/categories', data),
     offShelfProduct: (id) => request.put(`/api/admin/products/${id}/off-shelf`),
