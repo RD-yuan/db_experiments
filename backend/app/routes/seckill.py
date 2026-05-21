@@ -133,8 +133,8 @@ def create_seckill_order():
     existing = Order.query.join(OrderItem).filter(
         Order.user_id == user.user_id,
         OrderItem.product_id == sp.product_id,
-        Order.status.in_([0,1,2,3]),
-        Order.create_time >= session.start_time
+        Order.payment_method == 5,
+        Order.status.in_([0,1,2,3])
     ).count()
     if existing + quantity > sp.limit_per_user:
         return error_response('超过限购数量')
@@ -157,7 +157,7 @@ def create_seckill_order():
         order = Order(
             order_id=order_id, user_id=user.user_id,
             total_amount=payment_amount, payment_amount=payment_amount,
-            status=0, address_snapshot=json.dumps(addr.to_dict(), ensure_ascii=False)
+            status=0, payment_method=5, address_snapshot=json.dumps(addr.to_dict(), ensure_ascii=False)
         )
         db.session.add(order)
         db.session.flush()
