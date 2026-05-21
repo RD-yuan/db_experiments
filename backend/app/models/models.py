@@ -232,7 +232,7 @@ class ShoppingCart(db.Model):
     cart_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(db.Integer, db.ForeignKey('t_user.user_id'), nullable=False)
     product_id = db.Column(db.Integer, db.ForeignKey('t_product.product_id'), nullable=False)
-    sku_id = db.Column(db.Integer, default=None)
+    sku_id = db.Column(db.Integer, nullable=False, default=0, server_default='0')
     quantity = db.Column(db.Integer, nullable=False, default=1)
     selected = db.Column(db.SmallInteger, default=1)
     create_time = db.Column(db.DateTime, default=beijing_now)
@@ -259,8 +259,6 @@ class ShoppingCart(db.Model):
                 result['sku_spec_text'] = self.sku.spec_text
             if self.sku.price is not None:
                 result['sku_price'] = float(self.sku.price)
-            if self.sku.vip_price is not None:
-                result['sku_vip_price'] = float(self.sku.vip_price)
         return result
 
 
@@ -361,6 +359,8 @@ class Order(db.Model):
     # 备注
     buyer_note = db.Column(db.String(255))
     seller_note = db.Column(db.String(255))
+    refund_reason = db.Column(db.String(500))
+    refund_remark = db.Column(db.String(500))
     
     create_time = db.Column(db.DateTime, default=beijing_now)
     update_time = db.Column(db.DateTime, default=beijing_now, onupdate=datetime.utcnow)
@@ -396,6 +396,8 @@ class Order(db.Model):
             'shipping_number': self.shipping_number,
             'shipping_time': self.shipping_time.isoformat() if self.shipping_time else None,
             'address_snapshot': self.address_snapshot,
+            'refund_reason': self.refund_reason,
+            'refund_remark': self.refund_remark,
             'create_time': self.create_time.isoformat() if self.create_time else None
         }
 
@@ -407,9 +409,10 @@ class OrderItem(db.Model):
     order_item_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     order_id = db.Column(db.BigInteger, db.ForeignKey('t_order.order_id'), nullable=False)
     product_id = db.Column(db.Integer, db.ForeignKey('t_product.product_id'), nullable=False)
+    sku_id = db.Column(db.Integer, nullable=False, default=0, server_default='0')
+    sku_text = db.Column(db.String(200))
     product_name = db.Column(db.String(200), nullable=False)
     product_image = db.Column(db.String(255))
-    sku_id = db.Column(db.Integer, default=None)
     price = db.Column(db.Numeric(10, 2), nullable=False)
     quantity = db.Column(db.Integer, nullable=False)
     subtotal = db.Column(db.Numeric(10, 2), nullable=False)
@@ -423,9 +426,10 @@ class OrderItem(db.Model):
         result = {
             'order_item_id': self.order_item_id,
             'product_id': self.product_id,
+            'sku_id': self.sku_id or 0,
+            'sku_text': self.sku_text,
             'product_name': self.product_name,
             'product_image': self.product_image,
-            'sku_id': self.sku_id,
             'price': float(self.price),
             'quantity': self.quantity,
             'subtotal': float(self.subtotal),
@@ -591,8 +595,6 @@ class ProductSku(db.Model):
     price = db.Column(db.Numeric(10, 2))
     stock = db.Column(db.Integer, nullable=False, default=0)
     locked_stock = db.Column(db.Integer, default=0)
-    original_price = db.Column(db.Numeric(10, 2))
-    vip_price = db.Column(db.Numeric(10, 2))
     image = db.Column(db.String(255))
     status = db.Column(db.SmallInteger, default=1)
     create_time = db.Column(db.DateTime, default=beijing_now)
@@ -608,8 +610,6 @@ class ProductSku(db.Model):
             'spec_ids': self.spec_ids,
             'spec_text': self.spec_text,
             'price': float(self.price) if self.price else None,
-            'original_price': float(self.original_price) if self.original_price else None,
-            'vip_price': float(self.vip_price) if self.vip_price else None,
             'stock': self.stock or 0,
             'available_stock': self.available_stock,
             'locked_stock': self.locked_stock or 0,
@@ -642,7 +642,7 @@ class SeckillProduct(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     session_id = db.Column(db.Integer, db.ForeignKey('t_seckill_session.session_id'), nullable=False)
     product_id = db.Column(db.Integer, db.ForeignKey('t_product.product_id'), nullable=False)
-    sku_id = db.Column(db.Integer, default=None)
+    sku_id = db.Column(db.Integer, nullable=False, default=0, server_default='0')
     seckill_price = db.Column(db.Numeric(10,2), nullable=False)
     seckill_stock = db.Column(db.Integer, nullable=False, default=0)
     limit_per_user = db.Column(db.Integer, default=1)
@@ -682,6 +682,18 @@ class Notification(db.Model):
             'is_read': self.is_read,
             'create_time': self.create_time.isoformat() if self.create_time else None
         }
+
+
+class NotificationRead(db.Model):
+    __tablename__ = 't_notification_read'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    notification_id = db.Column(db.Integer, db.ForeignKey('t_notification.id', ondelete='CASCADE'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('t_user.user_id', ondelete='CASCADE'), nullable=False)
+    read_time = db.Column(db.DateTime, default=beijing_now)
+
+    __table_args__ = (
+        db.UniqueConstraint('notification_id', 'user_id', name='uk_notification_user_read'),
+    )
 
 
 class Refund(db.Model):

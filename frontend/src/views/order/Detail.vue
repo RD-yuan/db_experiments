@@ -52,6 +52,7 @@
         <el-button v-if="order.status === 0" type="primary" @click="handlePay">立即支付</el-button>
         <el-button v-if="order.status === 0" @click="handleCancel">取消订单</el-button>
         <el-button v-if="order.status === 2 && order.user_id === userStore.user?.user_id" type="primary" @click="handleReceive">确认收货</el-button>
+        <el-button v-if="canRefund" type="warning" @click="handleRefund">申请退货</el-button>
         <el-button @click="$router.back()">返回</el-button>
       </div>
     </el-card>

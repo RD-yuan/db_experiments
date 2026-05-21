@@ -47,11 +47,7 @@ def get_cart():
                 if sku and sku.price:
                     base = float(sku.price)
             if user and user.has_active_vip():
-                if item.sku_id:
-                    sku = db.session.get(CartSku, item.sku_id)
-                    if sku and sku.vip_price and float(sku.vip_price) > 0 and float(sku.vip_price) < base:
-                        base = float(sku.vip_price)
-                elif p.vip_price and float(p.vip_price) > 0 and float(p.vip_price) < normal_price:
+                if not item.sku_id and p.vip_price and float(p.vip_price) > 0 and float(p.vip_price) < normal_price:
                     base = float(p.vip_price)
                 from flask import current_app
                 benefits = current_app.config.get('VIP_BENEFITS', {}).get(user.vip_level, {})
@@ -101,11 +97,14 @@ def get_cart():
 def add_to_cart():
     """添加商品到购物车"""
     user_id = g.current_user_id
-    data = request.get_json()
+    data = request.get_json() or {}
 
     product_id = data.get('product_id')
-    sku_id = data.get('sku_id')
-    quantity = data.get('quantity', 1)
+    try:
+        sku_id = int(data.get('sku_id') or 0)
+        quantity = int(data.get('quantity', 1))
+    except (TypeError, ValueError):
+        return error_response('参数格式错误')
 
     if not product_id:
         return error_response('商品ID不能为空')
@@ -124,8 +123,12 @@ def add_to_cart():
         sku = db.session.get(ProductSku, sku_id)
         if not sku or sku.product_id != product_id:
             return error_response('规格不存在')
+        if sku.status != 1:
+            return error_response('该规格不可购买')
         if sku.available_stock < quantity:
             return error_response('该规格库存不足')
+    elif product.has_sku:
+        return error_response('请选择商品规格')
     elif product.available_stock < quantity:
         return error_response('库存不足')
 
@@ -133,6 +136,13 @@ def add_to_cart():
     cart_item = ShoppingCart.query.filter_by(
         user_id=user_id, product_id=product_id, sku_id=sku_id
     ).first()
+
+    target_quantity = (cart_item.quantity if cart_item else 0) + quantity
+    if sku:
+        if sku.available_stock < target_quantity:
+            return error_response('该规格库存不足')
+    elif product.available_stock < target_quantity:
+        return error_response('库存不足')
 
     try:
         if cart_item:
@@ -178,7 +188,7 @@ def add_to_cart():
 def update_cart_item(cart_id):
     """更新购物车商品"""
     user_id = g.current_user_id
-    data = request.get_json()
+    data = request.get_json() or {}
     
     cart_item = ShoppingCart.query.filter_by(
         cart_id=cart_id, user_id=user_id
@@ -188,12 +198,19 @@ def update_cart_item(cart_id):
         return error_response('购物车项不存在', 404)
     
     if 'quantity' in data:
-        quantity = data['quantity']
+        try:
+            quantity = int(data['quantity'])
+        except (TypeError, ValueError):
+            return error_response('数量格式错误')
         if quantity < 1:
             return error_response('数量必须大于0')
         
         # 检查库存
-        if cart_item.product and cart_item.product.available_stock < quantity:
+        if cart_item.sku_id:
+            sku = db.session.get(ProductSku, cart_item.sku_id)
+            if not sku or sku.available_stock < quantity:
+                return error_response('该规格库存不足')
+        elif cart_item.product and cart_item.product.available_stock < quantity:
             return error_response('库存不足')
         
         cart_item.quantity = quantity

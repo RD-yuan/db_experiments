@@ -87,7 +87,7 @@ def create_e2e_app():
     os.environ.setdefault("SECRET_KEY", "e2e-secret-key")
     os.environ.setdefault("JWT_SECRET_KEY", "e2e-jwt-secret-key")
 
-    app = create_app("development")
+    app = create_app("production")
     app.config.update(
         DEBUG=False,
         TESTING=True,

@@ -654,7 +654,6 @@ const toggleTemplate = (templateId, checked) => {
 const generateSkuCombinations = () => {
   // 为每个选中的模板收集选中的规格值
   const valueArrays = []
-  const valueInfos = [] // [{template_name, value_name, value_id}]
   for (const tid of selectedTemplateIds.value) {
     const tpl = specTemplates.value.find(t => t.template_id === tid)
     if (!tpl) continue

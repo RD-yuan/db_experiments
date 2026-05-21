@@ -134,14 +134,16 @@ CREATE TABLE t_shopping_cart (
     cart_id INT AUTO_INCREMENT PRIMARY KEY COMMENT '购物车ID',
     user_id INT NOT NULL COMMENT '用户ID',
     product_id INT NOT NULL COMMENT '商品ID',
+    sku_id INT NOT NULL DEFAULT 0 COMMENT 'SKU ID，0表示无规格',
     quantity INT NOT NULL DEFAULT 1 COMMENT '数量',
     selected TINYINT DEFAULT 1 COMMENT '是否选中: 0-否 1-是',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '添加时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     
-    UNIQUE KEY uk_user_product (user_id, product_id),
+    UNIQUE KEY uk_user_product_sku (user_id, product_id, sku_id),
     INDEX idx_user_id (user_id),
     INDEX idx_product_id (product_id),
+    INDEX idx_sku_id (sku_id),
     
     FOREIGN KEY (user_id) REFERENCES t_user(user_id) ON DELETE CASCADE,
     FOREIGN KEY (product_id) REFERENCES t_product(product_id) ON DELETE CASCADE
@@ -230,6 +232,8 @@ CREATE TABLE t_order (
     -- 备注
     buyer_note VARCHAR(255) DEFAULT NULL COMMENT '买家备注',
     seller_note VARCHAR(255) DEFAULT NULL COMMENT '卖家备注',
+    refund_reason VARCHAR(500) DEFAULT NULL COMMENT '退货原因',
+    refund_remark VARCHAR(500) DEFAULT NULL COMMENT '管理员备注',
     
     -- 时间
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -251,6 +255,8 @@ CREATE TABLE t_order_item (
     order_item_id INT AUTO_INCREMENT PRIMARY KEY COMMENT '订单明细ID',
     order_id BIGINT NOT NULL COMMENT '订单号',
     product_id INT NOT NULL COMMENT '商品ID',
+    sku_id INT NOT NULL DEFAULT 0 COMMENT 'SKU ID，0表示无规格',
+    sku_text VARCHAR(200) DEFAULT NULL COMMENT 'SKU规格快照',
     product_name VARCHAR(200) NOT NULL COMMENT '商品名称(快照)',
     product_image VARCHAR(255) DEFAULT NULL COMMENT '商品图片(快照)',
     price DECIMAL(10,2) NOT NULL COMMENT '商品单价(快照)',
@@ -260,6 +266,7 @@ CREATE TABLE t_order_item (
     
     INDEX idx_order_id (order_id),
     INDEX idx_product_id (product_id),
+    INDEX idx_sku_id (sku_id),
     
     FOREIGN KEY (order_id) REFERENCES t_order(order_id) ON DELETE CASCADE,
     FOREIGN KEY (product_id) REFERENCES t_product(product_id) ON DELETE RESTRICT
@@ -419,6 +426,97 @@ CREATE TABLE t_product_sku (
 ALTER TABLE t_product
     ADD COLUMN has_sku TINYINT NOT NULL DEFAULT 0 COMMENT '是否有多规格: 0-否 1-是' AFTER exchange_points,
     ADD INDEX idx_has_sku (has_sku);
+
+
+-- ============================================================
+-- 18. 秒杀场次表 (t_seckill_session)
+-- ============================================================
+DROP TABLE IF EXISTS t_seckill_product;
+DROP TABLE IF EXISTS t_seckill_session;
+CREATE TABLE t_seckill_session (
+    session_id INT AUTO_INCREMENT PRIMARY KEY COMMENT '秒杀场次ID',
+    name VARCHAR(100) NOT NULL COMMENT '场次名称',
+    start_time DATETIME NOT NULL COMMENT '开始时间',
+    end_time DATETIME NOT NULL COMMENT '结束时间',
+    status TINYINT DEFAULT 1 COMMENT '状态: 0-禁用 1-启用',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_time (start_time, end_time),
+    INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='秒杀场次表';
+
+-- ============================================================
+-- 19. 秒杀商品表 (t_seckill_product)
+-- ============================================================
+CREATE TABLE t_seckill_product (
+    id INT AUTO_INCREMENT PRIMARY KEY COMMENT '秒杀商品ID',
+    session_id INT NOT NULL COMMENT '场次ID',
+    product_id INT NOT NULL COMMENT '商品ID',
+    sku_id INT NOT NULL DEFAULT 0 COMMENT 'SKU ID，0表示无规格',
+    seckill_price DECIMAL(10,2) NOT NULL COMMENT '秒杀价',
+    seckill_stock INT NOT NULL DEFAULT 0 COMMENT '秒杀库存',
+    limit_per_user INT DEFAULT 1 COMMENT '每人限购数量',
+    version INT DEFAULT 0 COMMENT '乐观锁版本号',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_session (session_id),
+    INDEX idx_product (product_id),
+    INDEX idx_sku_id (sku_id),
+    UNIQUE KEY uk_session_product_sku (session_id, product_id, sku_id),
+    FOREIGN KEY (session_id) REFERENCES t_seckill_session(session_id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES t_product(product_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='秒杀商品表';
+
+-- ============================================================
+-- 20. 通知表 (t_notification)
+-- ============================================================
+DROP TABLE IF EXISTS t_notification_read;
+DROP TABLE IF EXISTS t_notification;
+CREATE TABLE t_notification (
+    id INT AUTO_INCREMENT PRIMARY KEY COMMENT '通知ID',
+    title VARCHAR(200) NOT NULL COMMENT '标题',
+    content TEXT COMMENT '内容',
+    type TINYINT NOT NULL DEFAULT 1 COMMENT '类型: 1-系统公告 2-个人消息',
+    user_id INT DEFAULT NULL COMMENT '个人消息接收用户ID，公告为NULL',
+    is_read TINYINT DEFAULT 0 COMMENT '个人消息已读状态: 0-未读 1-已读',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_user_type (user_id, type),
+    INDEX idx_create_time (create_time),
+    FOREIGN KEY (user_id) REFERENCES t_user(user_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='通知表';
+
+-- ============================================================
+-- 21. 系统公告已读表 (t_notification_read)
+-- ============================================================
+CREATE TABLE t_notification_read (
+    id INT AUTO_INCREMENT PRIMARY KEY COMMENT '记录ID',
+    notification_id INT NOT NULL COMMENT '通知ID',
+    user_id INT NOT NULL COMMENT '用户ID',
+    read_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '已读时间',
+    UNIQUE KEY uk_notification_user_read (notification_id, user_id),
+    INDEX idx_user_id (user_id),
+    FOREIGN KEY (notification_id) REFERENCES t_notification(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES t_user(user_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='系统公告已读表';
+
+-- ============================================================
+-- 22. 退货申请表 (t_refund)
+-- ============================================================
+DROP TABLE IF EXISTS t_refund;
+CREATE TABLE t_refund (
+    id INT AUTO_INCREMENT PRIMARY KEY COMMENT '退货申请ID',
+    order_id BIGINT NOT NULL COMMENT '订单号',
+    user_id INT NOT NULL COMMENT '用户ID',
+    reason VARCHAR(500) NOT NULL COMMENT '退货原因',
+    status TINYINT DEFAULT 0 COMMENT '状态: 0-待审核 1-已同意 2-已拒绝',
+    admin_id INT DEFAULT NULL COMMENT '处理管理员ID',
+    remark VARCHAR(500) DEFAULT NULL COMMENT '管理员备注',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    INDEX idx_order_id (order_id),
+    INDEX idx_user_id (user_id),
+    INDEX idx_status (status),
+    FOREIGN KEY (order_id) REFERENCES t_order(order_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES t_user(user_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='退货申请表';
 
 
 -- ============================================================

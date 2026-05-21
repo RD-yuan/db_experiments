@@ -531,17 +531,14 @@ def process_refund(refund_id):
                 product = item.product
                 if product:
                     if item.sku_id:
-                        from app.models.models import ProductSku as PSku
-                        sku = db.session.get(PSku, item.sku_id)
+                        sku = db.session.get(ProductSku, item.sku_id)
                         if sku:
                             sku.stock = (sku.stock or 0) + item.quantity
-                        all_skus = PSku.query.filter_by(product_id=product.product_id).all()
-                        product.stock = sum((s.stock or 0) for s in all_skus)
-                    else:
-                        product.stock = (product.stock or 0) + item.quantity
+                    product.stock = (product.stock or 0) + item.quantity
                     product.sold_count = max(0, (product.sold_count or 0) - item.quantity)
 
-            _restore_seckill_stock(order)
+            if order.payment_method == 5:
+                _restore_seckill_stock(order, lock_restored_stock=True)
 
             # Send approval notification
             from app.models.models import Notification
@@ -598,18 +595,35 @@ def list_seckill_products():
 def add_seckill_product():
     from app.models.models import SeckillProduct, ProductSku
     data = request.get_json() or {}
-    seckill_stock = data.get('seckill_stock', 0)
-    sku_id = data.get('sku_id')
+    try:
+        seckill_stock = int(data.get('seckill_stock', 0) or 0)
+        sku_id = int(data.get('sku_id') or 0)
+    except (TypeError, ValueError):
+        return error_response('秒杀库存或规格参数格式错误')
 
-    product = db.session.get(Product, data['product_id'])
+    if seckill_stock <= 0:
+        return error_response('秒杀库存必须大于0')
+
+    product_id = data.get('product_id')
+    session_id = data.get('session_id')
+    if not product_id or not session_id:
+        return error_response('场次和商品不能为空')
+
+    product = db.session.get(Product, product_id)
     if not product:
         return error_response('商品不存在', 404)
+    if product.status != 1:
+        return error_response('商品已下架，不能参加秒杀')
+    if product.has_sku and not sku_id:
+        return error_response('多规格商品必须选择秒杀规格')
 
     # Validate stock
     if sku_id:
         sku = db.session.get(ProductSku, sku_id)
         if not sku or sku.product_id != product.product_id:
             return error_response('规格不存在')
+        if sku.status != 1:
+            return error_response('该规格不可参加秒杀')
         available = (sku.stock or 0) - (sku.locked_stock or 0)
         if seckill_stock > available:
             return error_response(f'秒杀库存({seckill_stock})不能超过规格可用库存({available})')
@@ -619,8 +633,8 @@ def add_seckill_product():
             return error_response(f'秒杀库存({seckill_stock})不能超过商品可用库存({available})')
 
     sp = SeckillProduct(
-        session_id=data['session_id'],
-        product_id=data['product_id'],
+        session_id=session_id,
+        product_id=product_id,
         sku_id=sku_id,
         seckill_price=data['seckill_price'],
         seckill_stock=seckill_stock,

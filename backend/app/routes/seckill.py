@@ -7,6 +7,7 @@ from app.models.models import SeckillSession, SeckillProduct, Product, ProductSk
 from app.utils.helpers import success_response, error_response, token_required, admin_required, generate_order_id
 from datetime import datetime, timedelta
 from decimal import Decimal
+from sqlalchemy import func
 import json
 
 seckill_bp = Blueprint('seckill', __name__)
@@ -67,16 +68,35 @@ def get_current():
     })
 
 
-def _restore_seckill_stock(order):
-    """Restore seckill stock when a seckill order is canceled or refunded."""
+def _restore_seckill_stock(order, lock_restored_stock=False):
+    """Restore seckill pool stock when a seckill order is canceled or refunded.
+
+    Seckill pool stock is already excluded from normal sale by locked_stock.
+    Canceled unpaid orders return to that pool without changing locked_stock.
+    Refunded paid orders restore real stock and must lock it again for the pool.
+    """
+    restored = 0
     for item in order.items:
-        sp = SeckillProduct.query.join(SeckillSession).filter(
+        query = SeckillProduct.query.join(SeckillSession).filter(
             SeckillProduct.product_id == item.product_id,
             SeckillSession.start_time <= order.create_time,
             SeckillSession.end_time >= order.create_time
-        ).first()
+        )
+        if item.sku_id:
+            query = query.filter(SeckillProduct.sku_id == item.sku_id)
+        sp = query.first()
         if sp:
             sp.seckill_stock = (sp.seckill_stock or 0) + item.quantity
+            sp.version = (sp.version or 0) + 1
+            restored += item.quantity
+            if lock_restored_stock:
+                if item.sku_id:
+                    sku = db.session.get(ProductSku, item.sku_id)
+                    if sku:
+                        sku.locked_stock = (sku.locked_stock or 0) + item.quantity
+                if item.product:
+                    item.product.locked_stock = (item.product.locked_stock or 0) + item.quantity
+    return restored
 
 
 @seckill_bp.route('/seckill/orders', methods=['POST'])
@@ -84,15 +104,18 @@ def _restore_seckill_stock(order):
 def create_seckill_order():
     data = request.get_json() or {}
     sp_id = data.get('seckill_product_id')
-    quantity = int(data.get('quantity', 1))
+    try:
+        quantity = int(data.get('quantity', 1))
+        sku_id = int(data.get('sku_id') or 0)
+    except (TypeError, ValueError):
+        return error_response('参数格式错误')
     address_id = data.get('address_id')
-    sku_id = data.get('sku_id')
     if quantity <= 0: return error_response('数量无效')
 
     user = db.session.get(User, g.current_user_id)
     if not user: return error_response('请先登录', 401)
 
-    sp = db.session.get(SeckillProduct, sp_id)
+    sp = SeckillProduct.query.filter_by(id=sp_id).with_for_update().first()
     if not sp: return error_response('秒杀商品不存在', 404)
 
     session = sp.session
@@ -104,6 +127,9 @@ def create_seckill_order():
         return error_response('秒杀库存不足')
 
     product = sp.product
+    if not product or product.status != 1:
+        return error_response('秒杀商品不存在或已下架')
+
     # SKU enforcement
     sku = None
     if sp.sku_id:
@@ -111,6 +137,8 @@ def create_seckill_order():
         sku = db.session.get(ProductSku, sp.sku_id)
         if not sku or sku.product_id != product.product_id:
             return error_response('秒杀商品规格已变更，请联系管理员')
+        if sku.status != 1:
+            return error_response('该规格不可购买')
         if sp.seckill_stock < quantity:
             return error_response('秒杀库存不足')
         if (sku.stock or 0) < quantity:
@@ -122,6 +150,8 @@ def create_seckill_order():
         sku = db.session.get(ProductSku, sku_id)
         if not sku or sku.product_id != product.product_id:
             return error_response('规格不存在')
+        if sku.status != 1:
+            return error_response('该规格不可购买')
         if (sku.stock or 0) < quantity:
             return error_response('该规格库存不足')
     else:
@@ -130,12 +160,15 @@ def create_seckill_order():
             return error_response('库存不足')
 
     # Check per-user limit
-    existing = Order.query.join(OrderItem).filter(
+    limit_query = db.session.query(func.coalesce(func.sum(OrderItem.quantity), 0)).select_from(Order).join(OrderItem).filter(
         Order.user_id == user.user_id,
         OrderItem.product_id == sp.product_id,
         Order.payment_method == 5,
         Order.status.in_([0,1,2,3])
-    ).count()
+    )
+    if sku:
+        limit_query = limit_query.filter(OrderItem.sku_id == sku.sku_id)
+    existing = limit_query.scalar() or 0
     if existing + quantity > sp.limit_per_user:
         return error_response('超过限购数量')
 
@@ -144,28 +177,25 @@ def create_seckill_order():
 
     try:
         sp.seckill_stock -= quantity
-        sp.version += 1
-
-        # Release locked stock
-        if sku:
-            sku.locked_stock = max(0, (sku.locked_stock or 0) - quantity)
-        product.locked_stock = max(0, (product.locked_stock or 0) - quantity)
-        product.sold_count = (product.sold_count or 0) + quantity
+        sp.version = (sp.version or 0) + 1
 
         order_id = generate_order_id()
         payment_amount = sp.seckill_price * quantity
         order = Order(
             order_id=order_id, user_id=user.user_id,
             total_amount=payment_amount, payment_amount=payment_amount,
-            status=0, payment_method=5, address_snapshot=json.dumps(addr.to_dict(), ensure_ascii=False)
+            status=0, payment_method=5,
+            buyer_note=f'SECKILL:{sp.id}',
+            address_snapshot=json.dumps(addr.to_dict(), ensure_ascii=False)
         )
         db.session.add(order)
         db.session.flush()
 
         item = OrderItem(
             order_id=order_id, product_id=product.product_id,
-            product_name=product.name, product_image=product.main_image,
-            sku_id=sku.sku_id if sku else None,
+            product_name=product.name, product_image=(sku.image if sku and sku.image else product.main_image),
+            sku_id=sku.sku_id if sku else 0,
+            sku_text=sku.spec_text if sku else None,
             price=sp.seckill_price, quantity=quantity, subtotal=payment_amount
         )
         db.session.add(item)

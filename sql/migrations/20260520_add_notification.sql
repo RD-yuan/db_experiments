@@ -15,4 +15,4 @@ CREATE TABLE t_notification (
     FOREIGN KEY (user_id) REFERENCES t_user(user_id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-ALTER TABLE t_shopping_cart ADD COLUMN sku_id INT DEFAULT NULL AFTER product_id;
+ALTER TABLE t_shopping_cart ADD COLUMN sku_id INT NOT NULL DEFAULT 0 COMMENT 'SKU ID，0表示无规格' AFTER product_id;
