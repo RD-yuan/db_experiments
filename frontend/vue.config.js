@@ -4,6 +4,13 @@ module.exports = {
   devServer: {
     host: '0.0.0.0',
     allowedHosts: 'all',
+    client: {
+      overlay: {
+        errors: true,
+        warnings: false,
+        runtimeErrors: false
+      }
+    },
     proxy: {
       '^/api': {
         target: backendTarget,

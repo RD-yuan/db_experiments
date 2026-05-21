@@ -1,4 +1,4 @@
-import { createApp } from 'vue'
+﻿import { createApp } from 'vue'
 import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
 import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
@@ -28,6 +28,9 @@ window.addEventListener('focus', () => {
     userStore.ensureSession(true)
   }
 })
+
+// Suppress ResizeObserver loop errors
+window.addEventListener('error', e => { if (e.message?.includes('ResizeObserver')) { e.stopImmediatePropagation(); e.preventDefault(); return false } }, true)
 
 userStore.ensureSession().finally(() => {
   app.mount('#app')

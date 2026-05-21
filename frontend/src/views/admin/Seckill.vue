@@ -17,6 +17,7 @@
         <el-table-column label="商品" min-width="160"><template #default="{row}">{{ row.product?.name }}</template></el-table-column>
         <el-table-column prop="seckill_price" label="秒杀价" width="100" />
         <el-table-column prop="seckill_stock" label="库存" width="80" />
+        <el-table-column label="SKU" width="120"><template #default="{row}">{{ row.sku_spec_text || '不限' }}</template></el-table-column>
         <el-table-column prop="limit_per_user" label="限购" width="80" />
         <el-table-column label="操作" width="100"><template #default="{row}"><el-button size="small" type="danger" @click="deleteSp(row)">删除</el-button></template></el-table-column>
       </el-table>
@@ -35,9 +36,17 @@
     <el-dialog v-model="spDialog" title="添加秒杀商品" width="500px">
       <el-form :model="spForm" label-width="100px">
         <el-form-item label="场次"><el-select v-model="spForm.session_id" placeholder="选择场次"><el-option v-for="s in sessions" :key="s.session_id" :label="s.name" :value="s.session_id" /></el-select></el-form-item>
-        <el-form-item label="商品ID"><el-input-number v-model="spForm.product_id" :min="1" /></el-form-item>
+        <el-form-item label="商品ID">
+          <div style="display:flex;gap:8px">
+            <el-input-number v-model="spForm.product_id" :min="1" @change="onProductIdChange" style="flex:1" />
+            <el-button @click="loadProductSkus" :loading="skuLoading">加载规格</el-button>
+          </div>
+        </el-form-item>
+        <el-form-item label="SKU" v-if="skuList.length > 0"><div style="display:flex;gap:8px;width:100%">
+          <el-select v-model="spForm.sku_id" placeholder="选择规格（可选）" clearable @change="onSkuSelected"><el-option v-for="s in skuList" :key="s.sku_id" :label="s.spec_text + ` (库存${s.stock})`" :value="s.sku_id" /></el-select><span v-if="selectedSkuStock > 0" style="color:#999;line-height:32px;white-space:nowrap">库存: {{ selectedSkuStock }}</span></div>
+        </el-form-item>
         <el-form-item label="秒杀价"><el-input-number v-model="spForm.seckill_price" :min="0" :precision="2" /></el-form-item>
-        <el-form-item label="库存"><el-input-number v-model="spForm.seckill_stock" :min="0" /></el-form-item>
+        <el-form-item label="库存"><el-input-number v-model="spForm.seckill_stock" :min="0" /><span v-if="selectedSkuStock > 0" style="margin-left:8px;color:#909399;font-size:12px">可用库存: {{ selectedSkuStock }}</span></el-form-item>
         <el-form-item label="限购"><el-input-number v-model="spForm.limit_per_user" :min="1" /></el-form-item>
       </el-form>
       <template #footer><el-button @click="spDialog=false">取消</el-button><el-button type="primary" @click="saveSp">保存</el-button></template>
@@ -58,7 +67,13 @@ const sessionForm = ref({ name: '', start_time: '', end_time: '', status: 1 })
 const spList = ref([])
 const spLoading = ref(false)
 const spDialog = ref(false)
-const spForm = ref({ session_id: '', product_id: 0, seckill_price: 0, seckill_stock: 0, limit_per_user: 1 })
+const spForm = ref({ session_id: '', product_id: 0, sku_id: null, seckill_price: 0, seckill_stock: 0, limit_per_user: 1 })
+const skuList = ref([])
+const skuLoading = ref(false)
+const selectedSkuStock = ref(0)
+const onSkuSelected = (val) => { if (val) { const s = skuList.value.find(x => x.sku_id === val); if (s) selectedSkuStock.value = (s.available_stock !== undefined ? s.available_stock : s.stock) || 0 } else { selectedSkuStock.value = 0 } }
+const onProductIdChange = () => { skuList.value = []; spForm.value.sku_id = null; selectedSkuStock.value = 0 }
+const loadProductSkus = async () => { const pid = spForm.value.product_id; if (!pid) { skuList.value = []; return; } skuLoading.value = true; try { const data = await api.product.getDetail(pid); if (data && data.skus && data.skus.length > 0) { skuList.value = data.skus } else { skuList.value = []; if (data && data.stock > 0) { selectedSkuStock.value = data.available_stock !== undefined ? data.available_stock : data.stock } } } catch(e) { skuList.value = []; ElMessage.error('加载失败') } finally { skuLoading.value = false } }
 
 const loadSessions = async () => {
   sLoading.value = true
@@ -105,7 +120,7 @@ const saveSession = async () => {
 }
 
 const openSpDialog = () => {
-  spForm.value = { session_id: sessions.value[0]?.session_id || '', product_id: 0, seckill_price: 0, seckill_stock: 0, limit_per_user: 1 }
+  spForm.value = { session_id: sessions.value[0]?.session_id || '', product_id: 0, sku_id: null, seckill_price: 0, seckill_stock: 0, limit_per_user: 1 }; skuList.value = []; selectedSkuStock.value = 0
   spDialog.value = true
 }
 

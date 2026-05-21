@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="seckill-page">
     <div v-if="!data.session" class="empty-tip"><el-empty description="暂无秒杀活动" /></div>
     <template v-else>
@@ -10,7 +10,7 @@
         <div v-for="sp in data.products" :key="sp.id" class="seckill-item">
           <div class="sp-image"><el-image :src="sp.product?.main_image || ''" fit="cover"><template #error><div class="img-placeholder">No Image</div></template></el-image></div>
           <div class="sp-info">
-            <h4>{{ sp.product?.name }}</h4>
+            <h4>{{ sp.product?.name }}</h4>            <div class="sp-sku" v-if="sp.sku_spec_text">{{ sp.sku_spec_text }}</div>
             <div class="sp-price"><span class="seckill-price">秒杀价 ¥{{ sp.seckill_price }}</span><span class="orig-price">¥{{ sp.product?.price }}</span></div>
             <div class="sp-stock">剩余 {{ sp.seckill_stock }} 件</div>
             <el-button type="danger" size="small" :disabled="sp.seckill_stock<=0" @click="buy(sp)">立即抢购</el-button>
@@ -75,14 +75,13 @@ const currentProduct = computed(() => currentSp.value?.product || null)
 
 const maxQty = computed(() => {
   if (!currentSp.value) return 1
+  const perUserLimit = currentSp.value.limit_per_user || 1
   const seckillLimit = currentSp.value.seckill_stock || 0
-  if (currentProduct.value?.has_sku) {
-    if (currentSku.value) {
-      return Math.min(seckillLimit, currentSku.value.stock || 0)
-    }
-    return seckillLimit
+  let limit = Math.min(perUserLimit, seckillLimit)
+  if (currentProduct.value?.has_sku && currentSku.value) {
+    limit = Math.min(limit, currentSku.value.stock || 0)
   }
-  return seckillLimit
+  return Math.max(1, limit)
 })
 
 const canSubmit = computed(() => {

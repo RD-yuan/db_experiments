@@ -642,21 +642,26 @@ class SeckillProduct(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     session_id = db.Column(db.Integer, db.ForeignKey('t_seckill_session.session_id'), nullable=False)
     product_id = db.Column(db.Integer, db.ForeignKey('t_product.product_id'), nullable=False)
+    sku_id = db.Column(db.Integer, default=None)
     seckill_price = db.Column(db.Numeric(10,2), nullable=False)
     seckill_stock = db.Column(db.Integer, nullable=False, default=0)
     limit_per_user = db.Column(db.Integer, default=1)
     version = db.Column(db.Integer, default=0)
     create_time = db.Column(db.DateTime, default=beijing_now)
     product = db.relationship('Product')
+    sku = db.relationship('ProductSku', foreign_keys=[sku_id], primaryjoin='SeckillProduct.sku_id == ProductSku.sku_id', lazy='select')
 
     def to_dict(self):
         result = {
             'id': self.id, 'session_id': self.session_id, 'product_id': self.product_id,
+            'sku_id': self.sku_id,
             'seckill_price': float(self.seckill_price), 'seckill_stock': self.seckill_stock,
             'limit_per_user': self.limit_per_user
         }
         if self.product:
             result['product'] = self.product.to_dict()
+        if self.sku:
+            result['sku_spec_text'] = self.sku.spec_text
         return result
 
 

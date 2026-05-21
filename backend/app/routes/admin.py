@@ -596,16 +596,43 @@ def list_seckill_products():
 @admin_bp.route('/seckill/products', methods=['POST'])
 @admin_required
 def add_seckill_product():
-    from app.models.models import SeckillProduct
+    from app.models.models import SeckillProduct, ProductSku
     data = request.get_json() or {}
+    seckill_stock = data.get('seckill_stock', 0)
+    sku_id = data.get('sku_id')
+
+    product = db.session.get(Product, data['product_id'])
+    if not product:
+        return error_response('商品不存在', 404)
+
+    # Validate stock
+    if sku_id:
+        sku = db.session.get(ProductSku, sku_id)
+        if not sku or sku.product_id != product.product_id:
+            return error_response('规格不存在')
+        available = (sku.stock or 0) - (sku.locked_stock or 0)
+        if seckill_stock > available:
+            return error_response(f'秒杀库存({seckill_stock})不能超过规格可用库存({available})')
+    else:
+        available = (product.stock or 0) - (product.locked_stock or 0)
+        if seckill_stock > available:
+            return error_response(f'秒杀库存({seckill_stock})不能超过商品可用库存({available})')
+
     sp = SeckillProduct(
         session_id=data['session_id'],
         product_id=data['product_id'],
+        sku_id=sku_id,
         seckill_price=data['seckill_price'],
-        seckill_stock=data.get('seckill_stock', 0),
+        seckill_stock=seckill_stock,
         limit_per_user=data.get('limit_per_user', 1)
     )
     db.session.add(sp)
+
+    # Lock stock (only increase locked_stock, do NOT decrease stock)
+    if sku_id:
+        sku.locked_stock = (sku.locked_stock or 0) + seckill_stock
+    product.locked_stock = (product.locked_stock or 0) + seckill_stock
+
     db.session.commit()
     return success_response(sp.to_dict(), '添加成功')
 
@@ -615,6 +642,13 @@ def delete_seckill_product(sp_id):
     from app.models.models import SeckillProduct
     sp = db.session.get(SeckillProduct, sp_id)
     if sp:
+        remaining = sp.seckill_stock
+        if sp.sku_id:
+            sku = db.session.get(ProductSku, sp.sku_id)
+            if sku:
+                sku.locked_stock = max(0, (sku.locked_stock or 0) - remaining)
+        if sp.product:
+            sp.product.locked_stock = max(0, (sp.product.locked_stock or 0) - remaining)
         db.session.delete(sp)
         db.session.commit()
     return success_response(message='已删除')

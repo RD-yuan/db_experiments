@@ -1,4 +1,4 @@
-'''
+﻿'''
 Seckill routes.
 '''
 from flask import Blueprint, request, g
@@ -104,15 +104,28 @@ def create_seckill_order():
         return error_response('秒杀库存不足')
 
     product = sp.product
-    # SKU 校验
+    # SKU enforcement
     sku = None
-    if sku_id:
+    if sp.sku_id:
+        # Admin has restricted this seckill to a specific SKU
+        sku = db.session.get(ProductSku, sp.sku_id)
+        if not sku or sku.product_id != product.product_id:
+            return error_response('秒杀商品规格已变更，请联系管理员')
+        if sp.seckill_stock < quantity:
+            return error_response('秒杀库存不足')
+        if (sku.stock or 0) < quantity:
+            return error_response('该规格库存不足')
+    elif product.has_sku:
+        # Product has SKUs but seckill is not restricted - user must pick one
+        if not sku_id:
+            return error_response('请选择商品规格')
         sku = db.session.get(ProductSku, sku_id)
         if not sku or sku.product_id != product.product_id:
             return error_response('规格不存在')
         if (sku.stock or 0) < quantity:
             return error_response('该规格库存不足')
-    elif not product.has_sku:
+    else:
+        # Product has no SKU
         if (product.stock or 0) < quantity:
             return error_response('库存不足')
 
@@ -132,6 +145,12 @@ def create_seckill_order():
     try:
         sp.seckill_stock -= quantity
         sp.version += 1
+
+        # Release locked stock
+        if sku:
+            sku.locked_stock = max(0, (sku.locked_stock or 0) - quantity)
+        product.locked_stock = max(0, (product.locked_stock or 0) - quantity)
+        product.sold_count = (product.sold_count or 0) + quantity
 
         order_id = generate_order_id()
         payment_amount = sp.seckill_price * quantity
