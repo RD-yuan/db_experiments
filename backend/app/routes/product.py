@@ -1,7 +1,9 @@
 ﻿"""
 商品路由
 """
+import uuid
 from decimal import Decimal
+from pathlib import Path
 from flask import Blueprint, request, g
 from sqlalchemy import func, select
 from flasgger import swag_from
@@ -13,6 +15,28 @@ from app.utils.helpers import (
 )
 
 product_bp = Blueprint('product', __name__)
+
+ALLOWED_PRODUCT_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+MAX_PRODUCT_IMAGE_SIZE = 5 * 1024 * 1024
+
+
+def _save_upload_image(file, filename_prefix='product'):
+    if not file or not file.filename:
+        return None, '请选择图片'
+
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+    if ext not in ALLOWED_PRODUCT_IMAGE_EXTENSIONS:
+        return None, '仅支持 png/jpg/jpeg/gif/webp'
+
+    if request.content_length and request.content_length > MAX_PRODUCT_IMAGE_SIZE:
+        return None, '图片大小不能超过 5MB'
+
+    upload_dir = Path(__file__).resolve().parents[1] / 'static' / 'uploads'
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"{filename_prefix}_{uuid.uuid4().hex}.{ext}"
+    filepath = upload_dir / filename
+    file.save(str(filepath))
+    return f"/static/uploads/{filename}", None
 
 
 @product_bp.route('', methods=['GET'])
@@ -227,6 +251,33 @@ def get_exchange_products():
     return success_response(result)
 
 # ============ 管理员接口 ============
+
+@product_bp.route('/upload-image', methods=['POST'])
+@admin_required
+def upload_product_image():
+    """上传商品主图，返回 URL；传入 product_id 时直接写入商品主图字段。"""
+    product_id = request.form.get('product_id', type=int)
+    product = None
+    if product_id:
+        product = db.session.get(Product, product_id)
+        if not product:
+            return error_response('商品不存在', 404)
+
+    file = request.files.get('file')
+    url, error = _save_upload_image(file)
+    if error:
+        return error_response(error)
+
+    if product:
+        try:
+            product.main_image = url
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            return error_response(f'保存图片失败: {str(e)}')
+
+    return success_response({'url': url}, '上传成功')
+
 
 @product_bp.route('', methods=['POST'])
 @admin_required

@@ -21,7 +21,12 @@
         <el-table-column prop="product_id" label="ID" width="80" />
         <el-table-column label="商品图片" width="80">
           <template #default="{ row }">
-            <el-image :src="row.main_image" fit="cover" style="width: 50px; height: 50px" />
+            <el-image v-if="row.main_image" :src="row.main_image" fit="cover" class="table-product-image">
+              <template #error>
+                <div class="table-product-image product-image-fallback">加载失败</div>
+              </template>
+            </el-image>
+            <div v-else class="table-product-image product-image-fallback">无图</div>
           </template>
         </el-table-column>
         <el-table-column prop="name" label="商品名称" min-width="180" />
@@ -146,6 +151,36 @@
         </el-form-item>
         <el-form-item label="品牌">
           <el-input v-model="form.brand" />
+        </el-form-item>
+        <el-form-item label="商品主图">
+          <div class="product-image-field">
+            <el-upload
+              action="#"
+              :show-file-list="false"
+              :before-upload="beforeProductImageUpload"
+              :http-request="uploadProductImage"
+              accept="image/png,image/jpeg,image/gif,image/webp"
+            >
+              <div class="product-image-uploader" :class="{ 'is-loading': productImageUploading }">
+                <el-image v-if="form.main_image" :src="form.main_image" fit="cover" class="product-image-preview">
+                  <template #error>
+                    <div class="product-image-placeholder">图片加载失败</div>
+                  </template>
+                </el-image>
+                <div v-else class="product-image-placeholder">
+                  {{ productImageUploading ? '上传中' : '上传主图' }}
+                </div>
+              </div>
+            </el-upload>
+            <div class="product-image-actions">
+              <el-input
+                v-model="form.main_image"
+                placeholder="上传后自动填入，也可粘贴图片 URL"
+                clearable
+              />
+              <el-button v-if="form.main_image" @click="form.main_image = ''">清除</el-button>
+            </div>
+          </div>
         </el-form-item>
         <el-form-item label="商品标签">
           <el-checkbox v-model="form.is_hot" :true-value="1" :false-value="0">热销</el-checkbox>
@@ -330,6 +365,7 @@ const form = ref({
   stock: 0,
   exchange_points: 0,
   brand: '',
+  main_image: '',
   is_hot: 0,
   is_new: 0,
   is_recommend: 0,
@@ -357,6 +393,7 @@ const batchStock = ref(null)
 const allTags = ref([])
 const formTagIds = ref([])
 const tagNameCache = ref({})
+const productImageUploading = ref(false)
 
 // ==================== 分类 ====================
 
@@ -472,7 +509,7 @@ const handleAdd = () => {
   form.value = {
     name: '', category_id: null, price: 0, original_price: null,
     vip_price: null, stock: 0, exchange_points: 0, brand: '',
-    is_hot: 0, is_new: 0, is_recommend: 0, description: ''
+    main_image: '', is_hot: 0, is_new: 0, is_recommend: 0, description: ''
   }
   formTagIds.value = []
   dialogVisible.value = true
@@ -490,6 +527,7 @@ const handleEdit = (row) => {
     stock: row.stock || 0,
     exchange_points: row.exchange_points || 0,
     brand: row.brand || '',
+    main_image: row.main_image || '',
     is_hot: row.is_hot || 0,
     is_new: row.is_new || 0,
     is_recommend: row.is_recommend || 0,
@@ -532,6 +570,36 @@ const handleDelete = async (row) => {
     loadProducts()
   } catch (error) {
     if (error !== 'cancel') console.error('删除失败:', error)
+  }
+}
+
+const beforeProductImageUpload = (file) => {
+  const allowedTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']
+  if (!allowedTypes.includes(file.type)) {
+    ElMessage.warning('仅支持 png/jpg/jpeg/gif/webp')
+    return false
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    ElMessage.warning('图片大小不能超过 5MB')
+    return false
+  }
+  return true
+}
+
+const uploadProductImage = async ({ file, onSuccess, onError }) => {
+  productImageUploading.value = true
+  const formData = new FormData()
+  formData.append('file', file)
+
+  try {
+    const res = await api.admin.uploadProductImage(formData)
+    form.value.main_image = res.url
+    ElMessage.success('图片上传成功')
+    onSuccess && onSuccess(res)
+  } catch (error) {
+    onError && onError(error)
+  } finally {
+    productImageUploading.value = false
   }
 }
 
@@ -761,5 +829,69 @@ onMounted(() => {
   margin-left: 10px;
   color: #909399;
   font-size: 12px;
+}
+
+.table-product-image {
+  width: 50px;
+  height: 50px;
+  border-radius: 6px;
+}
+
+.product-image-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f5f7fa;
+  color: #909399;
+  font-size: 12px;
+  border: 1px dashed #dcdfe6;
+}
+
+.product-image-field {
+  width: 100%;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.product-image-uploader {
+  width: 96px;
+  height: 96px;
+  border: 1px dashed #dcdfe6;
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: pointer;
+  background: #fafafa;
+  transition: border-color 0.2s;
+}
+
+.product-image-uploader:hover {
+  border-color: #409eff;
+}
+
+.product-image-uploader.is-loading {
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.product-image-preview,
+.product-image-placeholder {
+  width: 96px;
+  height: 96px;
+}
+
+.product-image-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #909399;
+  font-size: 13px;
+}
+
+.product-image-actions {
+  flex: 1;
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 </style>
