@@ -24,8 +24,13 @@
         <el-form-item label="商品">{{ currentSp?.product?.name }}</el-form-item>
         <el-form-item label="价格">¥{{ currentSp?.seckill_price }}</el-form-item>
 
-        <!-- SKU 选择 -->
-        <template v-if="currentProduct?.has_sku && skuTemplates.length > 0">
+        <!-- 锁定 SKU：商家已指定规格，不可选择 -->
+        <el-form-item v-if="isSkuLocked" label="规格">
+          <el-tag type="primary">{{ currentSp?.sku_spec_text || '默认' }}</el-tag>
+        </el-form-item>
+
+        <!-- 未锁定 SKU：用户可选择规格 -->
+        <template v-else-if="currentProduct?.has_sku && skuTemplates.length > 0">
           <el-form-item v-for="tpl in skuTemplates" :key="tpl.template_id" :label="tpl.name">
             <el-radio-group v-model="selectedSpecs[tpl.template_id]" @change="onSkuChange">
               <el-radio-button v-for="val in tpl.values" :key="val.value_id" :value="val.value_id">
@@ -72,6 +77,7 @@ const skuTemplates = ref([])
 let timer = null
 
 const currentProduct = computed(() => currentSp.value?.product || null)
+const isSkuLocked = computed(() => (currentSp.value?.sku_id || 0) > 0)
 
 const maxQty = computed(() => {
   if (!currentSp.value) return 1
@@ -85,8 +91,8 @@ const maxQty = computed(() => {
 })
 
 const canSubmit = computed(() => {
+  if (isSkuLocked.value) return true  // 商家已锁定规格
   if (!currentProduct.value?.has_sku) return true
-  // 有 SKU 则必须选完所有规格
   if (skuTemplates.value.length === 0) return true
   return Object.keys(selectedSpecs.value).length === skuTemplates.value.length
     && Object.values(selectedSpecs.value).every(Boolean)
@@ -173,7 +179,16 @@ const buy = async (sp) => {
   addrId.value = null
   selectedSpecs.value = {}
   currentSku.value = null
-  await loadSkuTemplates()
+  // 商家已锁定 SKU：直接使用，不加载模板
+  if ((sp.sku_id || 0) > 0) {
+    const product = sp.product
+    if (product?.skus) {
+      const locked = product.skus.find(s => s.sku_id === sp.sku_id)
+      if (locked) currentSku.value = locked
+    }
+  } else {
+    await loadSkuTemplates()
+  }
   try { addresses.value = await api.user.getAddresses() } catch (e) { console.error(e) }
   orderDialog.value = true
 }
