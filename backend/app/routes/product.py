@@ -147,6 +147,7 @@ def get_products():
         )
     elif sort == 'new':
         query = query.order_by(
+            Product.is_new.desc(),
             Product.create_time.asc() if order == 'asc' else Product.create_time.desc()
         )
     else:

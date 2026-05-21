@@ -10,7 +10,7 @@ from app import db
 from app.models.models import User, Address, PointsLog, Order, OrderItem, Product, Category
 from app.utils.helpers import (
     success_response, error_response, token_required,
-    paginate
+    paginate, log_operation
 )
 from app.utils.validators import (
     is_valid_email, is_valid_phone, normalize_email, normalize_optional_text
@@ -145,6 +145,7 @@ def update_profile():
 
     try:
         db.session.commit()
+        log_operation(g.current_user_id, 'UPDATE_PROFILE', '修改个人信息')
         return success_response(user.to_dict(), '更新成功')
     except Exception as e:
         db.session.rollback()
@@ -188,6 +189,7 @@ def recharge():
     try:
         user.balance = (user.balance or Decimal('0.00')) + recharge_amount
         db.session.commit()
+        log_operation(g.current_user_id, 'RECHARGE', f'充值 ¥{float(recharge_amount):.2f}')
         return success_response({'new_balance': float(user.balance)}, '充值成功')
     except Exception as e:
         db.session.rollback()
@@ -493,6 +495,7 @@ def purchase_vip():
         # db.session.add(points_log)
 
         db.session.commit()
+        log_operation(g.current_user_id, 'PURCHASE_VIP', f'购买VIP等级{level}，{months}个月')
         return success_response(user.to_dict(), 'VIP开通成功')
     except Exception as e:
         db.session.rollback()

@@ -456,8 +456,11 @@ class Review(db.Model):
     status = db.Column(db.SmallInteger, default=1)  # 0-待审核 1-已发布 2-已屏蔽
     admin_reply = db.Column(db.Text)
     reply_time = db.Column(db.DateTime)
+    follow_up_comment = db.Column(db.Text)
+    follow_up_images = db.Column(db.Text)
+    follow_up_time = db.Column(db.DateTime)
     create_time = db.Column(db.DateTime, default=beijing_now)
-    
+
     def to_dict(self):
         return {
             'review_id': self.review_id,
@@ -470,6 +473,9 @@ class Review(db.Model):
             'is_anonymous': self.is_anonymous,
             'status': self.status,
             'admin_reply': self.admin_reply,
+            'follow_up_comment': self.follow_up_comment,
+            'follow_up_images': self.follow_up_images,
+            'follow_up_time': self.follow_up_time.isoformat() if self.follow_up_time else None,
             'create_time': self.create_time.isoformat() if self.create_time else None,
             'username': self.user.username if self.user else '未知用户'
         }

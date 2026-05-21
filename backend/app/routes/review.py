@@ -1,25 +1,68 @@
 """
 评价路由
 """
+import json
+import uuid
+from pathlib import Path
+from datetime import datetime
 from flask import Blueprint, request, g
 from flasgger import swag_from
 from app import db
 from app.models.models import Review, Order, OrderItem, Product, User
-from app.utils.helpers import success_response, error_response, token_required, paginate
+from app.utils.helpers import success_response, error_response, token_required, paginate, log_operation
 
 review_bp = Blueprint('review', __name__)
+
+ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+MAX_IMAGE_SIZE = 5 * 1024 * 1024
+
+
+@review_bp.route('/upload-image', methods=['POST'])
+@token_required
+def upload_review_image():
+    """上传评价/追评图片"""
+    file = request.files.get('file')
+    if not file or not file.filename:
+        return error_response('请选择图片')
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+    if ext not in ALLOWED_IMAGE_EXTENSIONS:
+        return error_response('仅支持 png/jpg/jpeg/gif/webp')
+    if request.content_length and request.content_length > MAX_IMAGE_SIZE:
+        return error_response('图片不能超过 5MB')
+    upload_dir = Path(__file__).resolve().parents[1] / 'static' / 'uploads' / 'reviews'
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"review_{uuid.uuid4().hex}.{ext}"
+    filepath = upload_dir / filename
+    file.save(str(filepath))
+    return success_response({'url': f'/static/uploads/reviews/{filename}'}, '上传成功')
+
+
+def _join_images(images):
+    if not images:
+        return None
+    if isinstance(images, list):
+        return json.dumps(images, ensure_ascii=False)
+    return images
 
 
 @review_bp.route('/product/<int:product_id>', methods=['GET'])
 def get_product_reviews(product_id):
-    """获取商品评价"""
+    """获取商品评价，支持好评/差评筛选"""
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 10, type=int)
-    query = Review.query.filter_by(product_id=product_id, status=1).order_by(Review.create_time.desc())
+    rating_type = request.args.get('rating_type', '').strip()
+
+    query = Review.query.filter_by(product_id=product_id, status=1)
+    if rating_type == 'good':
+        query = query.filter(Review.rating >= 4)
+    elif rating_type == 'bad':
+        query = query.filter(Review.rating <= 2)
+
+    query = query.order_by(Review.create_time.desc())
     result = paginate(query, page, per_page)
     for item in result['items']:
         if item.get('is_anonymous'):
-            item['user_id'] = None
+            item['username'] = '匿名用户'
     return success_response(result)
 
 
@@ -81,13 +124,14 @@ def create_review():
         order_item_id=order_item_id,
         rating=rating,
         comment=comment,
-        images=','.join(images) if images else None,
+        images=_join_images(images),
         is_anonymous=1 if is_anonymous else 0
     )
     try:
         order_item.is_reviewed = 1
         db.session.add(review)
         db.session.commit()
+        log_operation(user_id, 'CREATE_REVIEW', f'评价商品 #{order_item.product_id}，评分 {rating}')
         return success_response(review.to_dict(), '评价成功')
     except Exception as e:
         db.session.rollback()
@@ -113,7 +157,7 @@ def update_review(review_id):
     if 'comment' in data:
         review.comment = data['comment']
     if 'images' in data:
-        review.images = ','.join(data['images']) if data['images'] else None
+        review.images = _join_images(data['images'])
     if 'is_anonymous' in data:
         review.is_anonymous = 1 if data['is_anonymous'] else 0
 
@@ -123,6 +167,37 @@ def update_review(review_id):
     except Exception as e:
         db.session.rollback()
         return error_response(f'更新失败: {str(e)}')
+
+
+@review_bp.route('/<int:review_id>/follow-up', methods=['PUT'])
+@token_required
+def add_follow_up(review_id):
+    """追加评价（仅限本人，已完成订单）"""
+    user_id = g.current_user_id
+    review = db.session.get(Review, review_id)
+    if not review:
+        return error_response('评价不存在', 404)
+    if review.user_id != user_id:
+        return error_response('无权操作他人评价', 403)
+    if review.follow_up_comment:
+        return error_response('已追评过，不可重复追评')
+
+    data = request.get_json() or {}
+    comment = (data.get('comment') or '').strip()
+    images = data.get('images', [])
+    if not comment:
+        return error_response('追评内容不能为空')
+
+    review.follow_up_comment = comment
+    review.follow_up_images = _join_images(images)
+    review.follow_up_time = datetime.now()
+
+    try:
+        db.session.commit()
+        return success_response(review.to_dict(), '追评成功')
+    except Exception as e:
+        db.session.rollback()
+        return error_response(f'追评失败: {str(e)}')
 
 
 @review_bp.route('/<int:review_id>', methods=['DELETE'])
@@ -137,12 +212,12 @@ def delete_review(review_id):
         return error_response('无权删除他人评价', 403)
 
     try:
-        # 重置订单项评价状态
         order_item = db.session.get(OrderItem, review.order_item_id)
         if order_item:
             order_item.is_reviewed = 0
         db.session.delete(review)
         db.session.commit()
+        log_operation(user_id, 'DELETE_REVIEW', f'删除评价 #{review_id}')
         return success_response(message='评价已删除')
     except Exception as e:
         db.session.rollback()
@@ -156,5 +231,5 @@ def get_my_reviews():
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 10, type=int)
     query = Review.query.filter_by(user_id=user_id).order_by(Review.create_time.desc())
-    result = paginate(query, page, per_page)   # 返回 { items, total, ... }
+    result = paginate(query, page, per_page)
     return success_response(result)

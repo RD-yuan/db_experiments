@@ -221,3 +221,28 @@ def generate_order_id():
     timestamp = int(time.time() * 1000)
     random_num = random.randint(100000, 999999)
     return int(f"{timestamp}{random_num}")
+
+
+def log_operation(user_id, operation_type, operation_desc, user_type=1, result=1, error_msg=None):
+    """记录用户操作日志（不抛出异常，不影响主流程）"""
+    try:
+        from flask import request
+        from app import db
+        from app.models.models import OperationLog
+
+        log = OperationLog(
+            user_id=user_id,
+            user_type=user_type,
+            operation_type=operation_type,
+            operation_desc=operation_desc,
+            request_method=request.method if request else None,
+            request_url=request.path if request else None,
+            ip_address=request.remote_addr if request else None,
+            user_agent=(request.headers.get('User-Agent', '')[:255] if request else None),
+            result=result,
+            error_msg=error_msg
+        )
+        db.session.add(log)
+        db.session.commit()
+    except Exception:
+        pass  # 日志记录失败不影响业务

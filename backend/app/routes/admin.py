@@ -6,8 +6,9 @@ from decimal import Decimal
 from app import db
 from app.models.models import User, Product, Category, Order, OperationLog, OrderItem, PointsLog, ShoppingCart, Review, Coupon, UserCoupon, ProductSku
 from app.routes.seckill import _restore_seckill_stock
+from app.routes.order import cancel_expired_orders
 from app.utils.helpers import (
-    success_response, error_response, admin_required, paginate
+    success_response, error_response, admin_required, paginate, log_operation
 )
 
 admin_bp = Blueprint('admin', __name__)
@@ -61,6 +62,7 @@ def update_user_status(user_id):
     try:
         user.status = status
         db.session.commit()
+        log_operation(g.current_user_id, 'ADMIN_USER_STATUS', f'{"禁用" if status == 0 else "启用"}用户 #{user_id}', user_type=2)
         return success_response(message='操作成功')
     except Exception as e:
         db.session.rollback()
@@ -100,6 +102,7 @@ def set_user_vip(user_id):
 
     try:
         db.session.commit()
+        log_operation(g.current_user_id, 'ADMIN_SET_VIP', f'设置用户 #{user_id} VIP等级{vip_level}，{vip_months}个月', user_type=2)
         return success_response(user.to_dict(), '设置成功')
     except Exception as e:
         db.session.rollback()
@@ -111,6 +114,7 @@ def set_user_vip(user_id):
 @admin_bp.route('/orders', methods=['GET'])
 @admin_required
 def get_all_orders():
+    cancel_expired_orders()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
     status = request.args.get('status', type=int)
@@ -735,7 +739,28 @@ def admin_delete_coupon(coupon_id):
         UserCoupon.query.filter_by(coupon_id=coupon_id).delete()
         db.session.delete(coupon)
         db.session.commit()
+        log_operation(g.current_user_id, 'ADMIN_DELETE_COUPON', f'删除优惠券 #{coupon_id}', user_type=2)
         return success_response(message='删除成功')
     except Exception as e:
         db.session.rollback()
         return error_response(f'删除失败: {str(e)}')
+
+
+# ============ 操作日志查看 ============
+
+@admin_bp.route('/logs', methods=['GET'])
+@admin_required
+def get_operation_logs():
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    user_id = request.args.get('user_id', type=int)
+    op_type = request.args.get('type', '').strip()
+
+    from app.models.models import OperationLog as OpLog
+    query = OpLog.query.order_by(OpLog.create_time.desc())
+    if user_id:
+        query = query.filter(OpLog.user_id == user_id)
+    if op_type:
+        query = query.filter(OpLog.operation_type == op_type)
+
+    return success_response(paginate(query, page, per_page))

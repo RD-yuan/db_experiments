@@ -37,11 +37,15 @@
         <el-table-column label="小计" width="120">
           <template #default="{ row }">¥{{ row.subtotal }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="140" v-if="order.status === 3 && order.user_id === userStore.user?.user_id">
+        <el-table-column label="操作" width="200" v-if="order.status === 3 && order.user_id === userStore.user?.user_id">
           <template #default="{ row }">
             <el-button v-if="!row.is_reviewed" type="primary" text @click="openReviewDialog(row)">评价</el-button>
             <template v-else>
               <el-button type="primary" text @click="openReviewDialog(row, true)">修改</el-button>
+              <el-button
+                v-if="!getReviewForItem(row.order_item_id)?.follow_up_comment"
+                type="success" text @click="openFollowUpDialog(row)"
+              >追评</el-button>
               <el-button type="danger" text @click="handleDeleteReview(row)">删除</el-button>
             </template>
           </template>
@@ -65,6 +69,24 @@
         <el-form-item label="评价内容">
           <el-input v-model="reviewForm.comment" type="textarea" :rows="4" placeholder="请输入您的使用感受..." />
         </el-form-item>
+        <el-form-item label="上传图片">
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <div v-for="(url, idx) in reviewForm.images" :key="idx" style="position:relative;width:80px;height:80px">
+              <el-image :src="url" fit="cover" style="width:80px;height:80px;border-radius:4px" />
+              <el-button size="small" circle type="danger" style="position:absolute;top:-6px;right:-6px" @click="reviewForm.images.splice(idx,1)">×</el-button>
+            </div>
+            <el-upload
+              v-if="reviewForm.images.length < 6"
+              :show-file-list="false"
+              :http-request="(opt) => uploadReviewImg(opt, 'review')"
+              accept="image/*"
+            >
+              <div style="width:80px;height:80px;border:1px dashed #d9d9d9;border-radius:4px;display:flex;align-items:center;justify-content:center;cursor:pointer">
+                <span style="font-size:24px;color:#999">+</span>
+              </div>
+            </el-upload>
+          </div>
+        </el-form-item>
         <el-form-item label="匿名评价">
           <el-switch v-model="reviewForm.is_anonymous" />
         </el-form-item>
@@ -72,6 +94,37 @@
       <template #footer>
         <el-button @click="reviewDialogVisible = false">取消</el-button>
         <el-button type="primary" @click="submitReview" :loading="submitting">提交</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 追评对话框 -->
+    <el-dialog v-model="followUpVisible" title="追加评价" width="500px">
+      <el-form :model="followUpForm" label-width="80px">
+        <el-form-item label="追评内容">
+          <el-input v-model="followUpForm.comment" type="textarea" :rows="4" placeholder="使用一段时间后的感受..." />
+        </el-form-item>
+        <el-form-item label="上传图片">
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <div v-for="(url, idx) in followUpForm.images" :key="idx" style="position:relative;width:80px;height:80px">
+              <el-image :src="url" fit="cover" style="width:80px;height:80px;border-radius:4px" />
+              <el-button size="small" circle type="danger" style="position:absolute;top:-6px;right:-6px" @click="followUpForm.images.splice(idx,1)">×</el-button>
+            </div>
+            <el-upload
+              v-if="followUpForm.images.length < 6"
+              :show-file-list="false"
+              :http-request="(opt) => uploadReviewImg(opt, 'followUp')"
+              accept="image/*"
+            >
+              <div style="width:80px;height:80px;border:1px dashed #d9d9d9;border-radius:4px;display:flex;align-items:center;justify-content:center;cursor:pointer">
+                <span style="font-size:24px;color:#999">+</span>
+              </div>
+            </el-upload>
+          </div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="followUpVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitFollowUp" :loading="submitting">提交追评</el-button>
       </template>
     </el-dialog>
   </div>
@@ -95,7 +148,17 @@ const submitting = ref(false)
 const currentOrderItem = ref(null)
 const currentReviewId = ref(null)
 
-const reviewForm = ref({ rating: 5, comment: '', is_anonymous: false })
+// 追评
+const followUpVisible = ref(false)
+const followUpForm = ref({ comment: '', images: [] })
+const followUpReviewId = ref(null)
+const myReviews = ref([])
+
+const getReviewForItem = (orderItemId) => {
+  return myReviews.value.find(r => r.order_item_id === orderItemId) || null
+}
+
+const reviewForm = ref({ rating: 5, comment: '', images: [], is_anonymous: false })
 
 const canRefund = computed(() => { if (!order.value || order.value.user_id !== userStore.user?.user_id) return false; if (order.value.status !== 1 && order.value.status !== 3) return false; return true })
 
@@ -115,10 +178,24 @@ const addressDisplay = computed(() => {
 const formatDate = (date) => dayjs(date).format('YYYY-MM-DD HH:mm:ss')
 const formatMoney = (value) => Number(value || 0).toFixed(2)
 
+const parseReviewImages = (imgs) => {
+  if (!imgs) return []
+  try { return JSON.parse(imgs) } catch { return imgs.split(',').filter(Boolean) }
+}
+
+const uploadReviewImg = async (opt, target) => {
+  try {
+    const res = await api.review.uploadImage(opt.file)
+    if (target === 'followUp') followUpForm.value.images.push(res.url)
+    else reviewForm.value.images.push(res.url)
+  } catch (e) { console.error('上传失败', e) }
+}
+
 const loadOrder = async () => {
   loading.value = true
   try {
     order.value = await api.order.getDetail(String(route.params.id))
+    if (order.value?.status === 3) loadMyReviews()
   } catch (error) {
     ElMessage.error('订单不存在')
     router.replace('/orders')
@@ -162,33 +239,23 @@ const handleReceive = async () => {
 const openReviewDialog = async (item, isEdit = false) => {
   currentOrderItem.value = item
   if (isEdit) {
-    try {
-      const res = await api.review.getMy({ page: 1, per_page: 100 })
-      console.log('getMy 返回:', res)
-      const reviewList = res.items || []
-      console.log('评价列表:', reviewList)
-      console.log('当前订单项ID:', item.order_item_id, typeof item.order_item_id)
-      const existing = reviewList.find(r => Number(r.order_item_id) === Number(item.order_item_id))
-      console.log('匹配结果:', existing)
-      if (existing) {
-        currentReviewId.value = existing.review_id
-        reviewForm.value = {
-          rating: existing.rating,
-          comment: existing.comment || '',
-          is_anonymous: !!existing.is_anonymous
-        }
-      } else {
-        ElMessage.error('未找到评价记录')
-        return
+    if (!myReviews.value.length) await loadMyReviews()
+    const existing = getReviewForItem(item.order_item_id)
+    if (existing) {
+      currentReviewId.value = existing.review_id
+      reviewForm.value = {
+        rating: existing.rating,
+        comment: existing.comment || '',
+        images: parseReviewImages(existing.images),
+        is_anonymous: !!existing.is_anonymous
       }
-    } catch (e) {
-      console.error('获取评价失败', e)
-      ElMessage.error('获取评价失败')
+    } else {
+      ElMessage.error('未找到评价记录')
       return
     }
   } else {
     currentReviewId.value = null
-    reviewForm.value = { rating: 5, comment: '', is_anonymous: false }
+    reviewForm.value = { rating: 5, comment: '', images: [], is_anonymous: false }
   }
   reviewDialogVisible.value = true
 }
@@ -202,6 +269,7 @@ const submitReview = async () => {
       await api.review.update(currentReviewId.value, {
         rating: reviewForm.value.rating,
         comment: reviewForm.value.comment.trim(),
+        images: reviewForm.value.images,
         is_anonymous: reviewForm.value.is_anonymous
       })
       ElMessage.success('评价已更新')
@@ -210,6 +278,7 @@ const submitReview = async () => {
         order_item_id: currentOrderItem.value.order_item_id,
         rating: reviewForm.value.rating,
         comment: reviewForm.value.comment.trim(),
+        images: reviewForm.value.images,
         is_anonymous: reviewForm.value.is_anonymous
       })
       ElMessage.success('评价成功')
@@ -226,20 +295,48 @@ const submitReview = async () => {
 const handleDeleteReview = async (item) => {
   try {
     await ElMessageBox.confirm('确定要删除该评价吗？', '提示')
-    const res = await api.review.getMy({ page: 1, per_page: 100 })
-    const reviewList = res.items || []
-    const target = reviewList.find(r => Number(r.order_item_id) === Number(item.order_item_id))
-    console.log('删除目标:', target)
-    if (!target) {
-      ElMessage.error('未找到评价记录')
-      return
-    }
+    const target = getReviewForItem(item.order_item_id)
+    if (!target) { ElMessage.error('未找到评价记录'); return }
     await api.review.delete(target.review_id)
     ElMessage.success('评价已删除')
+    myReviews.value = myReviews.value.filter(r => r.review_id !== target.review_id)
     loadOrder()
   } catch (error) {
     if (error !== 'cancel') console.error('删除失败', error)
   }
+}
+
+const loadMyReviews = async () => {
+  try {
+    const res = await api.review.getMy({ page: 1, per_page: 200 })
+    myReviews.value = res.items || []
+  } catch { myReviews.value = [] }
+}
+
+const openFollowUpDialog = async (item) => {
+  await loadMyReviews()
+  const review = getReviewForItem(item.order_item_id)
+  if (!review) { ElMessage.error('未找到评价记录'); return }
+  if (review.follow_up_comment) { ElMessage.warning('已追评过'); return }
+  followUpReviewId.value = review.review_id
+  followUpForm.value = { comment: '', images: [] }
+  followUpVisible.value = true
+}
+
+const submitFollowUp = async () => {
+  if (!followUpForm.value.comment.trim()) { ElMessage.warning('请输入追评内容'); return }
+  submitting.value = true
+  try {
+    await api.review.addFollowUp(followUpReviewId.value, {
+      comment: followUpForm.value.comment,
+      images: followUpForm.value.images
+    })
+    ElMessage.success('追评成功')
+    followUpVisible.value = false
+    loadOrder()
+    loadMyReviews()
+  } catch (error) { console.error('追评失败:', error) }
+  finally { submitting.value = false }
 }
 
 const handleRefund = async () => { try { const { value: reason } = await ElMessageBox.prompt('请填写退货原因', '申请退货', { confirmButtonText: '提交' }); await api.order.applyRefund(String(order.value.order_id), { reason }); ElMessage.success('退货申请已提交'); loadOrder() } catch(e) { if (e !== 'cancel') console.error(e) } }

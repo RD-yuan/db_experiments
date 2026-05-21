@@ -10,7 +10,7 @@ from app.models.models import Order, OrderItem, ShoppingCart, Address, User, Poi
 from app.utils.coupon_grant import grant_order_amount_coupon
 from app.utils.helpers import (
     success_response, error_response, token_required,
-    paginate, generate_order_id
+    paginate, generate_order_id, log_operation
 )
 
 order_bp = Blueprint('order', __name__)
@@ -60,6 +60,57 @@ def _calculate_coupon_discount(coupon, total_amount):
         return clamp_discount(coupon.value), None
     return Decimal('0.00'), '优惠券类型无效'
 
+def cancel_expired_orders():
+    """取消超过10分钟未支付的订单"""
+    from datetime import timedelta
+    from app.models.models import ProductSku, PointsLog, UserCoupon
+
+    deadline = datetime.now() - timedelta(minutes=10)
+    expired = Order.query.filter(
+        Order.status == 0,
+        Order.create_time < deadline
+    ).all()
+
+    for order in expired:
+        try:
+            # 释放锁定的 SKU 库存
+            for item in order.items:
+                if item.sku_id:
+                    sku = db.session.get(ProductSku, item.sku_id)
+                    if sku:
+                        sku.locked_stock = max(0, (sku.locked_stock or 0) - item.quantity)
+                if item.product:
+                    item.product.locked_stock = max(0, (item.product.locked_stock or 0) - item.quantity)
+                    # 同步 product locked_stock
+                    if item.product.has_sku:
+                        all_skus = ProductSku.query.filter_by(product_id=item.product.product_id).all()
+                        item.product.locked_stock = sum(max(0, (s.locked_stock or 0)) for s in all_skus)
+
+            # 退还积分
+            if order.points_used > 0:
+                user = order.user
+                if user:
+                    user.points = (user.points or 0) + order.points_used
+
+            # 退还优惠券
+            uc = UserCoupon.query.filter_by(
+                user_id=order.user_id, order_id=order.order_id, status=1
+            ).first()
+            if uc:
+                uc.status = 0
+                uc.use_time = None
+                uc.order_id = None
+
+            # 恢复秒杀库存
+            from app.routes.seckill import _restore_seckill_stock
+            _restore_seckill_stock(order)
+
+            order.status = 4  # 已取消
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+
 @order_bp.route('', methods=['GET'])
 @token_required
 @swag_from({
@@ -77,6 +128,7 @@ def _calculate_coupon_discount(coupon, total_amount):
 })
 def get_orders():
     """获取订单列表"""
+    cancel_expired_orders()
     user_id = g.current_user_id
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 10, type=int)
@@ -399,6 +451,7 @@ def cancel_order(order_id):
             used_coupon.order_id = None
 
         db.session.commit()
+        log_operation(g.current_user_id, 'CANCEL_ORDER', f'取消订单 #{order_id}')
         return success_response(message='订单已取消')
 
     except Exception as e:
@@ -491,6 +544,7 @@ def pay_order(order_id):
             pass
 
         db.session.commit()
+        log_operation(g.current_user_id, 'PAY_ORDER', f'支付订单 #{order_id}，金额 ¥{float(order.payment_amount):.2f}')
         return success_response(message='支付成功')
 
     except Exception as e:

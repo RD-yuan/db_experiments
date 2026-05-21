@@ -118,6 +118,15 @@
             </div>
           </div>
 
+          <!-- 好评/差评筛选 -->
+          <div class="rating-filter" v-if="reviewsLoaded">
+            <el-radio-group v-model="ratingFilter" size="small" @change="onFilterChange">
+              <el-radio-button value="">全部</el-radio-button>
+              <el-radio-button value="good">好评</el-radio-button>
+              <el-radio-button value="bad">差评</el-radio-button>
+            </el-radio-group>
+          </div>
+
           <div class="review-list">
             <div v-for="review in reviews" :key="review.review_id" class="review-item">
               <div class="review-header">
@@ -131,14 +140,30 @@
                 <p>{{ review.comment }}</p>
                 <div class="review-images" v-if="review.images">
                   <el-image
-                    v-for="(img, idx) in review.images.split(',')"
+                    v-for="(img, idx) in parseImages(review.images)"
                     :key="idx"
                     :src="img"
-                    :preview-src-list="review.images.split(',')"
+                    :preview-src-list="parseImages(review.images)"
                     fit="cover"
                     style="width: 100px; height: 100px; margin-right: 10px"
                   />
                 </div>
+              </div>
+              <!-- 追评 -->
+              <div v-if="review.follow_up_comment" class="follow-up">
+                <div class="follow-up-tag">追评</div>
+                <p>{{ review.follow_up_comment }}</p>
+                <div class="review-images" v-if="review.follow_up_images">
+                  <el-image
+                    v-for="(img, idx) in parseImages(review.follow_up_images)"
+                    :key="'fu'+idx"
+                    :src="img"
+                    :preview-src-list="parseImages(review.follow_up_images)"
+                    fit="cover"
+                    style="width: 100px; height: 100px; margin-right: 10px"
+                  />
+                </div>
+                <span class="time" v-if="review.follow_up_time">{{ formatDate(review.follow_up_time) }}</span>
               </div>
               <div class="review-footer">
                 <span class="time">{{ formatDate(review.create_time) }}</span>
@@ -288,6 +313,18 @@ const finalPrice = computed(() => {
 const reviews = ref([])
 const reviewPage = ref(1)
 const reviewTotal = ref(0)
+const ratingFilter = ref('')
+const reviewsLoaded = ref(false)
+
+const parseImages = (imgs) => {
+  if (!imgs) return []
+  try { return JSON.parse(imgs) } catch { return imgs.split(',') }
+}
+
+const onFilterChange = () => {
+  reviewPage.value = 1
+  loadReviews()
+}
 
 const avgRating = computed(() => {
   if (reviews.value.length === 0) return 0
@@ -360,10 +397,12 @@ const loadReviews = async () => {
   try {
     const data = await api.review.getProductReviews(route.params.id, {
       page: reviewPage.value,
-      per_page: 10
+      per_page: 10,
+      rating_type: ratingFilter.value || undefined
     })
     reviews.value = data.items || []
     reviewTotal.value = data.total || 0
+    reviewsLoaded.value = true
   } catch (error) {
     console.error('加载评价失败:', error)
   }
@@ -595,6 +634,11 @@ onMounted(() => {
 }
 
 .reviews-section {
+  .rating-filter {
+    text-align: center;
+    margin-bottom: 16px;
+  }
+
   .rating-summary {
     padding: 20px;
     background: #f9f9f9;
@@ -656,6 +700,33 @@ onMounted(() => {
       .review-images {
         display: flex;
         flex-wrap: wrap;
+      }
+    }
+
+    .follow-up {
+      margin-top: 12px;
+      padding: 12px;
+      background: #fff8f0;
+      border-radius: 6px;
+      border-left: 3px solid #ff6700;
+
+      .follow-up-tag {
+        font-size: 11px;
+        color: #ff6700;
+        font-weight: 600;
+        margin-bottom: 8px;
+      }
+
+      p {
+        color: #666;
+        line-height: 1.6;
+      }
+
+      .time {
+        display: block;
+        margin-top: 8px;
+        font-size: 12px;
+        color: #999;
       }
     }
 

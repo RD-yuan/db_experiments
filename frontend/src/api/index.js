@@ -156,6 +156,11 @@ const api = {
     getProductReviews: (productId, params) => request.get(`/api/reviews/product/${productId}`, { params }),
     create: (data) => request.post('/api/reviews', data),
     update: (id, data) => request.put(`/api/reviews/${id}`, data),
+    addFollowUp: (id, data) => request.put(`/api/reviews/${id}/follow-up`, data),
+    uploadImage: (file) => {
+      const fd = new FormData(); fd.append('file', file)
+      return request.post('/api/reviews/upload-image', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+    },
     delete: (id) => request.delete(`/api/reviews/${id}`),
     getMy: (params) => request.get('/api/reviews/my', { params })
   },
